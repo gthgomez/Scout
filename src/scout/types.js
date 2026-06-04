@@ -21,6 +21,17 @@ export const SETUP_STATUSES = Object.freeze([
 
 export const MODES = Object.freeze(["metadata_only", "static_inspection", "dynamic_probe"]);
 
+export const RUN_STATUSES = Object.freeze(["complete", "partial", "failed"]);
+
+export const STATIC_INSPECTION_STATUSES = Object.freeze([
+  "not_requested",
+  "not_inspected",
+  "missing_manifest",
+  "insufficient_static_evidence",
+  "static_docs_ok",
+  "static_docs_risky",
+]);
+
 export const GAP_CODES = Object.freeze([
   "ARCHITECTURE_GAP",
   "SECURITY_GAP",

@@ -27,7 +27,8 @@ Primary UX is Codex orchestration. The CLI is the deterministic backend and test
 
 ```powershell
 npm test
-node src/scout/cli.js profile create beginner-python --languages Python --labels "good first issue,help wanted"
+node src/scout/cli.js profile create beginner-python --languages Python --labels "good first issue,help wanted" --exclude-orgs archived-org
+node src/scout/cli.js workflow run --profile beginner-python --out-dir scout_session
 node src/scout/cli.js monitor --profile beginner-python --out scout_watch_report.md --json-out scout_watch_report.json
 node src/scout/cli.js inspect --report scout_watch_report.json --manifest manifest.json --out scout_static_report.md --json-out scout_static_report.json
 node src/scout/cli.js validate-report --report scout_static_report.json
@@ -35,3 +36,5 @@ node src/scout/cli.js export-shortlist --report scout_static_report.json --limit
 ```
 
 Scout stores local profiles and monitor snapshots under `.scout/`. That directory is ignored by Git because it is runtime state, not source code.
+
+The Codex-facing workflow writes `scout_session.json`, `scout_report.md`, `scout_report.json`, `scout_shortlist.md`, `codex_summary.md`, and `next_actions.json`. Scout may recommend manual review or static inspection, but it still stops before claiming issues, coding, cloning, installing, running repo commands, or writing to GitHub.

@@ -1,7 +1,8 @@
 #!/usr/bin/env node
-import { readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { defaultPolicy } from "./policy.js";
-import { discoverCandidates } from "./discovery.js";
+import { DEFAULT_QUERIES, discoverCandidates } from "./discovery.js";
 import { AuditLog } from "./audit-log.js";
 import { diffReports, loadMonitorSnapshot, saveMonitorSnapshot } from "./monitor.js";
 import {
@@ -16,7 +17,6 @@ import {
   dynamicProbeUnavailable,
   evidenceFromStaticInspection,
   inspectCandidateStaticManifest,
-  inspectArchiveStub,
 } from "./static-inspection.js";
 import { validateReportModel } from "./validators.js";
 
@@ -50,6 +50,9 @@ async function main(argv) {
   }
   if (command === "monitor") {
     return monitor(args);
+  }
+  if (command === "workflow") {
+    return workflow(args);
   }
   if (command === "probe") {
     dynamicProbeUnavailable();
@@ -145,15 +148,7 @@ async function inspect(args) {
 
   let report;
   if (!reportPath || !manifestPath) {
-    const note = "Static inspection requires --report <scout_report.json> and --manifest <manifest.json>.";
-    inspectArchiveStub({ policy });
-    auditLog.record({
-      operation: "static_file_read",
-      mode: policy.mode,
-      decision: "observed",
-      reason: note,
-    });
-    report = createReportModel({ candidates: [], decisions: [], evidence: [], audit_events: auditLog.all() });
+    throw new Error("inspect requires --report <scout_report.json> and --manifest <manifest.json>.");
   } else {
     const baseReport = await loadReport(reportPath);
     const manifestModel = await loadJson(manifestPath);
@@ -173,6 +168,8 @@ async function inspect(args) {
       reason: `Static manifest inspection completed for ${inspectedCandidates.length} candidates.`,
     });
     report = createReportModel({
+      run_status: baseReport.run_status,
+      collection_errors: baseReport.collection_errors,
       candidates: inspectedCandidates,
       decisions,
       evidence: [...baseReport.evidence, ...staticEvidence],
@@ -193,7 +190,17 @@ async function profile(args) {
     const name = args[1] ?? "default";
     const languages = splitArg(readArg(args, "--languages", "Python,TypeScript"));
     const labels = splitArg(readArg(args, "--labels", "good first issue,help wanted,documentation"));
-    const profileModel = createSearchProfile({ name, languages, labels });
+    const excludeOrgs = splitArg(readArg(args, "--exclude-orgs", ""));
+    const excludeRepos = splitArg(readArg(args, "--exclude-repos", ""));
+    const maxCandidates = readLimit(readArg(args, "--max-candidates", "50"));
+    const profileModel = createSearchProfile({
+      name,
+      languages,
+      labels,
+      exclude_orgs: excludeOrgs,
+      exclude_repos: excludeRepos,
+      max_candidates: maxCandidates,
+    });
     const saved = await saveSearchProfile(profileModel);
     console.log(JSON.stringify({ ...saved.profile, path: saved.path }, null, 2));
     return 0;
@@ -204,7 +211,7 @@ async function profile(args) {
     const jsonOut = readArg(args, "--json-out", null);
     const profileModel = await loadProfileOrDefault(name);
     const policy = defaultPolicy("metadata_only");
-    const report = await buildReport({ policy, limit: profileModel.max_candidates, queries: queriesFromProfile(profileModel) });
+    const report = await buildReport({ policy, limit: profileModel.max_candidates, queries: queriesFromProfile(profileModel), profile: profileModel });
     await writeReportOutputs(report, out, jsonOut);
     console.log(`Scout profile report written to ${out}`);
     if (jsonOut) console.log(`Scout machine report written to ${jsonOut}`);
@@ -220,9 +227,11 @@ async function monitor(args) {
   const profileModel = await loadProfileOrDefault(profileName);
   const policy = defaultPolicy("metadata_only");
   const previous = await loadMonitorSnapshot(profileName);
-  const current = await buildReport({ policy, limit: profileModel.max_candidates, queries: queriesFromProfile(profileModel) });
+  const current = await buildReport({ policy, limit: profileModel.max_candidates, queries: queriesFromProfile(profileModel), profile: profileModel });
   const monitorEvents = diffReports(previous?.decisions ?? [], current.decisions, profileModel.profile_id);
   const report = createReportModel({
+    run_status: current.run_status,
+    collection_errors: current.collection_errors,
     candidates: current.candidates,
     decisions: current.decisions,
     evidence: current.evidence,
@@ -237,12 +246,39 @@ async function monitor(args) {
   return 0;
 }
 
-async function buildReport({ policy, limit, queries }) {
+async function workflow(args) {
+  const action = args[0];
+  if (action !== "run") {
+    throw new Error("workflow command requires run");
+  }
+  const profileName = readArg(args, "--profile", "default");
+  const outDir = readArg(args, "--out-dir", "scout_session");
+  const profileModel = await loadProfileOrDefault(profileName);
+  const policy = defaultPolicy("metadata_only");
+  const report = await buildReport({ policy, limit: profileModel.max_candidates, queries: queriesFromProfile(profileModel), profile: profileModel });
+  const shortlist = exportShortlist(report, { limit: 10 });
+  const summary = renderCodexSummary(report);
+  const nextActions = createNextActions(report);
+
+  await mkdir(outDir, { recursive: true });
+  await writeFile(join(outDir, "scout_session.json"), JSON.stringify({ profile: profileModel, generated_at: new Date().toISOString() }, null, 2), "utf8");
+  await writeFile(join(outDir, "scout_report.md"), renderMarkdownReport(report), "utf8");
+  await writeFile(join(outDir, "scout_report.json"), JSON.stringify(report, null, 2), "utf8");
+  await writeFile(join(outDir, "scout_shortlist.md"), shortlist, "utf8");
+  await writeFile(join(outDir, "codex_summary.md"), summary, "utf8");
+  await writeFile(join(outDir, "next_actions.json"), JSON.stringify(nextActions, null, 2), "utf8");
+  console.log(`Scout workflow artifacts written to ${outDir}`);
+  return 0;
+}
+
+async function buildReport({ policy, limit, queries, profile = null }) {
   const auditLog = new AuditLog();
   let candidates = [];
   const evidence = [];
+  const collectionErrors = [];
+  const activeQueries = queries ?? DEFAULT_QUERIES;
   try {
-    candidates = await discoverCandidates({ policy, limit, queries, auditLog });
+    candidates = await discoverCandidates({ policy, limit, queries: activeQueries, auditLog, collectionErrors, profile });
   } catch (error) {
     if (error.code === "SCOUT_POLICY_DENIED") throw error;
     auditLog.record({
@@ -250,6 +286,13 @@ async function buildReport({ policy, limit, queries }) {
       mode: policy.mode,
       decision: "failed",
       reason: error.message,
+    });
+    collectionErrors.push({
+      error_id: `collection-discovery-error-${Date.now()}`,
+      operation: "github_search_read",
+      query: null,
+      message: error.message,
+      observed_at: new Date().toISOString(),
     });
     evidence.push({
       evidence_id: `evidence-discovery-error-${Date.now()}`,
@@ -264,7 +307,15 @@ async function buildReport({ policy, limit, queries }) {
     candidates = [];
   }
   const decisions = triageCandidates(candidates);
-  return createReportModel({ candidates, decisions, evidence, audit_events: auditLog.all() });
+  const runStatus = determineRunStatus({ candidates, collectionErrors, queryCount: activeQueries.length || 1 });
+  return createReportModel({
+    run_status: runStatus,
+    collection_errors: collectionErrors,
+    candidates,
+    decisions,
+    evidence,
+    audit_events: auditLog.all(),
+  });
 }
 
 async function writeReportOutputs(report, out, jsonOut = null) {
@@ -286,7 +337,18 @@ function readArg(args, name, fallback) {
 
 async function loadReport(reportPath) {
   const report = await loadJson(reportPath);
-  return validateReportModel(report);
+  return validateReportModel(normalizeReportModel(report));
+}
+
+function normalizeReportModel(report) {
+  if (!report || typeof report !== "object") {
+    return report;
+  }
+  return {
+    ...report,
+    run_status: report.run_status ?? "complete",
+    collection_errors: Array.isArray(report.collection_errors) ? report.collection_errors : [],
+  };
 }
 
 async function loadJson(path) {
@@ -358,7 +420,43 @@ function selectManifestForCandidate(manifestModel, candidateId) {
   if (Array.isArray(manifestModel?.manifests?.[candidateId])) {
     return manifestModel.manifests[candidateId];
   }
-  return [];
+  return null;
+}
+
+function determineRunStatus({ candidates, collectionErrors, queryCount }) {
+  if (collectionErrors.length === 0) return "complete";
+  if (candidates.length === 0 && collectionErrors.length >= queryCount) return "failed";
+  return "partial";
+}
+
+function renderCodexSummary(report) {
+  const recommended = report.decisions.filter((decision) => ["GREEN", "YELLOW"].includes(decision.verdict));
+  const unknown = report.decisions.filter((decision) => decision.verdict === "GRAY");
+  const dropped = report.decisions.filter((decision) => decision.verdict === "RED");
+  return [
+    "# Codex Scout Summary",
+    "",
+    `Run status: ${report.run_status}`,
+    `Recommended: ${recommended.length}`,
+    `Unknown: ${unknown.length}`,
+    `Dropped: ${dropped.length}`,
+    "",
+    "No clone, install, repo script, dynamic probe, or GitHub write action was attempted.",
+    "",
+    "## Next Safe Step",
+    recommended.length > 0
+      ? "Review the shortlist manually and choose candidates for static inspection or direct human review."
+      : "Review collection errors and broaden or adjust the profile before rerunning Scout.",
+  ].join("\n");
+}
+
+function createNextActions(report) {
+  return report.decisions.map((decision) => ({
+    candidate_id: decision.candidate_id,
+    action: decision.verdict === "RED" ? "drop_candidate" : decision.verdict === "GRAY" ? "review_candidate" : "manual_claim_possible",
+    reason: decision.risk_summary,
+    requires_human: true,
+  }));
 }
 
 function printHelp() {
@@ -374,6 +472,7 @@ Codex-facing backend commands:
   scout profile create beginner-python-ts --languages Python,TypeScript
   scout profile run beginner-python-ts --out scout_report.md
   scout monitor --profile beginner-python-ts --out scout_watch_report.md
+  scout workflow run --profile beginner-python-ts --out-dir scout_session
   scout test-policy
 
 Release 1 denies clone, installs, repo scripts, Docker, dynamic probes, and GitHub writes.`);

@@ -130,4 +130,23 @@ describe("static inspection primitives", () => {
     assert.equal(evidence.length, 1);
     assert.equal(evidence[0].source_type, "STATIC_FILE");
   });
+
+  it("does not mark missing or empty manifests as static docs ok", () => {
+    const policy = defaultPolicy("static_inspection");
+    const candidate = {
+      candidate_id: "SCOUT-alpha-green-1",
+      repo_owner: "acme",
+      repo_name: "tooling",
+      source_observations: [],
+      collection_status: "OBSERVED",
+    };
+
+    const missing = inspectCandidateStaticManifest({ policy, candidate, manifest: null });
+    const empty = inspectCandidateStaticManifest({ policy, candidate, manifest: [] });
+
+    assert.equal(missing.static_inspection_status, "missing_manifest");
+    assert.equal(missing.collection_status, "PARTIAL");
+    assert.equal(empty.static_inspection_status, "insufficient_static_evidence");
+    assert.equal(empty.collection_status, "PARTIAL");
+  });
 });

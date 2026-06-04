@@ -257,6 +257,24 @@ export function inspectArchiveStub({ policy, manifest = [] }) {
 }
 
 export function inspectCandidateStaticManifest({ policy, candidate, manifest = [] }) {
+  if (!Array.isArray(manifest)) {
+    return {
+      ...candidate,
+      static_inspection_status: "missing_manifest",
+      collection_status: "PARTIAL",
+      source_observations: [
+        ...(candidate.source_observations ?? []),
+        { kind: "static_manifest_missing", value: "No static manifest was supplied for this candidate." },
+      ],
+      static_inspection: {
+        setup_status: "unknown",
+        file_count: 0,
+        total_size_bytes: 0,
+        unsafe_entry_count: 0,
+        useful_static_evidence: false,
+      },
+    };
+  }
   const inspection = inspectArchiveStub({ policy, manifest });
   const safePaths = new Set(inspection.validation.safe_entries.map((entry) => entry.normalized_path.toLowerCase()));
   const observations = [...(candidate.source_observations ?? [])];
@@ -281,16 +299,28 @@ export function inspectCandidateStaticManifest({ policy, candidate, manifest = [
       `${inspection.validation.unsafe_entries.length} unsafe archive entries were blocked.`,
     );
   }
+  const usefulStaticEvidence = observations.some((item) =>
+    ["setup_docs", "contributor_guide", "tests_present"].includes(item.kind),
+  );
+  const staticInspectionStatus = inspection.validation.unsafe_entries.length > 0
+    ? "static_docs_risky"
+    : usefulStaticEvidence
+      ? "static_docs_ok"
+      : "insufficient_static_evidence";
 
   return {
     ...candidate,
     source_observations: observations,
-    collection_status: candidate.collection_status === "FAILED" ? "PARTIAL" : candidate.collection_status,
+    collection_status: candidate.collection_status === "FAILED" || staticInspectionStatus === "insufficient_static_evidence"
+      ? "PARTIAL"
+      : candidate.collection_status,
+    static_inspection_status: staticInspectionStatus,
     static_inspection: {
-      setup_status: inspection.validation.unsafe_entries.length > 0 ? "static_docs_risky" : "static_docs_ok",
+      setup_status: staticInspectionStatus === "static_docs_ok" ? "static_docs_ok" : "unknown",
       file_count: inspection.validation.file_count,
       total_size_bytes: inspection.validation.total_size_bytes,
       unsafe_entry_count: inspection.validation.unsafe_entries.length,
+      useful_static_evidence: usefulStaticEvidence,
     },
   };
 }
@@ -305,9 +335,9 @@ export function evidenceFromStaticInspection(candidate) {
       source_type: "STATIC_FILE",
       source_ref: `${candidate.repo_owner}/${candidate.repo_name} archive manifest`,
       observed_at: new Date().toISOString(),
-      trust_level: inspection.unsafe_entry_count > 0 ? "INFERRED" : "OBSERVED",
-      claim: `Static manifest inspected: ${inspection.file_count} files, ${inspection.unsafe_entry_count} unsafe entries blocked.`,
-      supports: inspection.unsafe_entry_count > 0 ? "static inspection risk" : "static inspection evidence",
+      trust_level: candidate.static_inspection_status === "static_docs_ok" ? "OBSERVED" : "UNKNOWN",
+      claim: `Static inspection status ${candidate.static_inspection_status}: ${inspection.file_count} files, ${inspection.unsafe_entry_count} unsafe entries blocked.`,
+      supports: candidate.static_inspection_status === "static_docs_ok" ? "static inspection evidence" : "static inspection uncertainty",
     },
   ];
 }

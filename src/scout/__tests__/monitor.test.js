@@ -29,4 +29,18 @@ describe("monitor snapshots", () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  it("records candidates missing from the current monitor run", () => {
+    const previousDecision = {
+      candidate_id: "SCOUT-alpha-old-1",
+      verdict: "GREEN",
+      human_next_action: "Review manually before claiming.",
+    };
+    const events = diffReports([previousDecision], [], "profile-alpha");
+
+    assert.equal(events.length, 1);
+    assert.equal(events[0].change_type, "candidate_missing");
+    assert.equal(events[0].previous_verdict, "GREEN");
+    assert.equal(events[0].current_verdict, "GRAY");
+  });
 });

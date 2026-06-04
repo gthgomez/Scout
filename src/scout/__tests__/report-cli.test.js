@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -27,8 +27,8 @@ function removeFixture(dir) {
   rmSync(dir, { recursive: true, force: true });
 }
 
-function runCli(args) {
-  const result = spawnSync(process.execPath, [cliPath, ...args], { encoding: "utf8" });
+function runCli(args, options = {}) {
+  const result = spawnSync(process.execPath, [cliPath, ...args], { encoding: "utf8", cwd: options.cwd });
   if (result.error) {
     throw result.error;
   }
@@ -131,6 +131,20 @@ describe("report CLI commands", () => {
     }
   });
 
+  it("accepts legacy saved reports without run metadata", () => {
+    const legacyReport = { ...reportFixtures.validReport };
+    delete legacyReport.run_status;
+    delete legacyReport.collection_errors;
+    const { dir, path } = createReportFixture(legacyReport);
+    try {
+      const output = runCli(["validate-report", "--report", path]);
+      assert.ok(output.includes("Report validation passed for"));
+      assert.ok(output.includes("Candidates: 1"));
+    } finally {
+      removeFixture(dir);
+    }
+  });
+
   it("explains candidate decisions from CLI", () => {
     const { dir, path } = createReportFixture();
     try {
@@ -167,6 +181,49 @@ describe("report CLI commands", () => {
       assert.throws(() => {
         runCli(["validate-report", "--report", path]);
     }, /Unable to parse JSON/);
+    } finally {
+      removeFixture(dir);
+    }
+  });
+
+  it("writes Codex-facing workflow artifacts", () => {
+    const dir = mkdtempSync(join(tmpdir(), "scout-workflow-"));
+    const profileDir = join(dir, ".scout", "profiles");
+    const outDir = join(dir, "session");
+    mkdirSync(profileDir, { recursive: true });
+    writeFileSync(
+      join(profileDir, "empty.json"),
+      JSON.stringify(
+        {
+          profile_id: "profile-empty",
+          name: "empty",
+          languages: [],
+          labels: [],
+          include_queries: [],
+          exclude_orgs: [],
+          exclude_repos: [],
+          trusted_seed_lists: [],
+          max_candidates: 1,
+          mode: "metadata_only",
+          threshold_overrides: {},
+          created_at: "2026-06-04T00:00:00.000Z",
+          updated_at: "2026-06-04T00:00:00.000Z",
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    try {
+      runCli(["workflow", "run", "--profile", "empty", "--out-dir", outDir], { cwd: dir });
+      const report = JSON.parse(readFileSync(join(outDir, "scout_report.json"), "utf8"));
+      const summary = readFileSync(join(outDir, "codex_summary.md"), "utf8");
+      const nextActions = JSON.parse(readFileSync(join(outDir, "next_actions.json"), "utf8"));
+
+      assert.equal(report.run_status, "complete");
+      assert.ok(summary.includes("No clone, install, repo script"));
+      assert.deepEqual(nextActions, []);
     } finally {
       removeFixture(dir);
     }

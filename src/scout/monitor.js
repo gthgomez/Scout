@@ -6,6 +6,7 @@ const verdictRank = { GREEN: 4, YELLOW: 3, GRAY: 2, RED: 1 };
 
 export function diffReports(previousDecisions, currentDecisions, profileId) {
   const previousById = new Map(previousDecisions.map((decision) => [decision.candidate_id, decision]));
+  const currentById = new Map(currentDecisions.map((decision) => [decision.candidate_id, decision]));
   const events = [];
   for (const current of currentDecisions) {
     const previous = previousById.get(current.candidate_id);
@@ -21,6 +22,11 @@ export function diffReports(previousDecisions, currentDecisions, profileId) {
       events.push(createMonitorEvent(profileId, current, previous.verdict, "verdict_improved", "Candidate verdict improved."));
     } else if (verdictRank[current.verdict] < verdictRank[previous.verdict]) {
       events.push(createMonitorEvent(profileId, current, previous.verdict, "verdict_downgraded", "Candidate verdict downgraded."));
+    }
+  }
+  for (const previous of previousDecisions) {
+    if (!currentById.has(previous.candidate_id)) {
+      events.push(createMissingCandidateEvent(profileId, previous));
     }
   }
   return events.map(validateMonitorEvent);
@@ -72,5 +78,19 @@ function createMonitorEvent(profileId, decision, previousVerdict, changeType, re
     current_verdict: decision.verdict,
     reason,
     human_next_action: decision.human_next_action,
+  };
+}
+
+function createMissingCandidateEvent(profileId, previous) {
+  return {
+    event_id: `monitor-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    profile_id: profileId,
+    candidate_id: previous.candidate_id,
+    observed_at: new Date().toISOString(),
+    change_type: "candidate_missing",
+    previous_verdict: previous.verdict,
+    current_verdict: "GRAY",
+    reason: "Candidate no longer appears in the current search results.",
+    human_next_action: "Review before acting; the issue may be closed, relabeled, claimed, or outside the current profile.",
   };
 }

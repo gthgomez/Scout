@@ -3,6 +3,8 @@ import { validateReportModel } from "./validators.js";
 const VERDICT_ORDER = Object.freeze({ GREEN: 0, YELLOW: 1, GRAY: 2, RED: 3 });
 
 export function createReportModel({
+  run_status = "complete",
+  collection_errors = [],
   candidates = [],
   evidence = [],
   decisions = [],
@@ -12,7 +14,9 @@ export function createReportModel({
 }) {
   return validateReportModel({
     generated_at: new Date().toISOString(),
+    run_status,
     runtime_safety_status: "Release 1: no clone, no install, no repo scripts, no GitHub writes, no dynamic probes.",
+    collection_errors,
     candidates,
     evidence,
     decisions,
@@ -34,6 +38,7 @@ export function renderMarkdownReport(report) {
     "## Executive Verdict",
     "",
     `Generated: ${report.generated_at}`,
+    `Run status: ${report.run_status}`,
     "",
     `Recommended candidates: ${recommended.length}`,
     `Unknown candidates: ${unknown.length}`,
@@ -56,6 +61,10 @@ export function renderMarkdownReport(report) {
     "## Evidence Log",
     "",
     renderEvidence(report.evidence),
+    "",
+    "## Collection Errors",
+    "",
+    renderCollectionErrors(report.collection_errors),
     "",
     "## Monitor Events",
     "",
@@ -224,6 +233,11 @@ function renderDroppedTable(decisions, candidates) {
 function renderEvidence(evidence) {
   if (evidence.length === 0) return "- No evidence records beyond candidate metadata were collected.";
   return evidence.map((item) => `- ${item.evidence_id}: [${item.trust_level}] ${item.claim}`).join("\n");
+}
+
+function renderCollectionErrors(errors) {
+  if (errors.length === 0) return "- None.";
+  return errors.map((item) => `- ${item.operation}: ${item.message}`).join("\n");
 }
 
 function renderCommandAttempts(commandAttempts) {

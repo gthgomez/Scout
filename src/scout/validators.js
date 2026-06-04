@@ -1,8 +1,10 @@
 import {
   GAP_CODES,
   MODES,
+  RUN_STATUSES,
   SETUP_STATUSES,
   SOURCE_TYPES,
+  STATIC_INSPECTION_STATUSES,
   TRUST_LEVELS,
   VERDICTS,
 } from "./types.js";
@@ -51,7 +53,21 @@ export function validateCandidateIssue(candidate) {
   assertArray(candidate.linked_prs, "CandidateIssue.linked_prs");
   assertArray(candidate.source_observations, "CandidateIssue.source_observations");
   assertEnum(candidate.collection_status, ["OBSERVED", "PARTIAL", "FAILED"], "CandidateIssue.collection_status");
+  if (candidate.static_inspection_status !== undefined) {
+    assertEnum(candidate.static_inspection_status, STATIC_INSPECTION_STATUSES, "CandidateIssue.static_inspection_status");
+  }
   return candidate;
+}
+
+export function validateCollectionError(error) {
+  assertObject(error, "CollectionError");
+  ["error_id", "operation", "message", "observed_at"].forEach((field) =>
+    assertString(error[field], `CollectionError.${field}`),
+  );
+  if (error.query !== null && error.query !== undefined) {
+    assertString(error.query, "CollectionError.query");
+  }
+  return error;
 }
 
 export function validateEvidenceItem(evidence) {
@@ -114,6 +130,7 @@ export function validateMonitorEvent(event) {
       "issue_claimed",
       "linked_pr_added",
       "metadata_partial",
+      "candidate_missing",
     ],
     "MonitorEvent.change_type",
   );
@@ -143,6 +160,8 @@ export function validateCommandAttempt(attempt) {
 
 export function validateReportModel(report) {
   assertObject(report, "ScoutReport");
+  assertEnum(report.run_status, RUN_STATUSES, "ScoutReport.run_status");
+  assertArray(report.collection_errors, "ScoutReport.collection_errors");
   assertArray(report.candidates, "ScoutReport.candidates");
   assertArray(report.evidence, "ScoutReport.evidence");
   assertArray(report.decisions, "ScoutReport.decisions");
@@ -150,6 +169,7 @@ export function validateReportModel(report) {
   assertArray(report.monitor_events, "ScoutReport.monitor_events");
   assertArray(report.command_attempts, "ScoutReport.command_attempts");
   report.candidates.forEach(validateCandidateIssue);
+  report.collection_errors.forEach(validateCollectionError);
   report.evidence.forEach(validateEvidenceItem);
   report.decisions.forEach(validateTriageDecision);
   report.audit_events.forEach(validateAuditEvent);

@@ -32,6 +32,7 @@ describe("discovery mapping", () => {
     assert.equal(candidate.issue_number, 42);
     assert.deepEqual(candidate.labels, ["good first issue"]);
     assert.equal(candidate.collection_status, "PARTIAL");
+    assert.equal(candidate.static_inspection_status, "not_requested");
   });
 
   it("dedupes by repo and issue number", () => {
@@ -188,6 +189,54 @@ describe("discovery mapping", () => {
     assert.equal(candidates.length, 1);
     assert.equal(candidates[0].collection_status, "PARTIAL");
     assert.ok(candidates[0].source_observations.some((item) => item.kind === "metadata_error"));
+  });
+
+  it("records GitHub search failures as collection errors", async () => {
+    const collectionErrors = [];
+    const candidates = await discoverCandidates({
+      policy: defaultPolicy("metadata_only"),
+      queries: ["query"],
+      limit: 1,
+      fetchImpl: async () => ({ ok: false, status: 403, json: async () => ({}) }),
+      collectionErrors,
+    });
+
+    assert.equal(candidates.length, 0);
+    assert.equal(collectionErrors.length, 1);
+    assert.equal(collectionErrors[0].operation, "github_search_read");
+    assert.match(collectionErrors[0].message, /403/);
+  });
+
+  it("applies saved profile repo and org exclusions before enrichment", async () => {
+    const fetchImpl = async (url) => {
+      if (String(url).includes("/search/issues")) {
+        return okJson({
+          items: [
+            {
+              repository_url: "https://api.github.com/repos/acme/tooling",
+              number: 42,
+              title: "Fix docs typo",
+              html_url: "https://github.com/acme/tooling/issues/42",
+              labels: [],
+              state: "open",
+              assignees: [],
+              updated_at: "2026-06-02T00:00:00Z",
+            },
+          ],
+        });
+      }
+      throw new Error("excluded candidates should not be enriched");
+    };
+
+    const candidates = await discoverCandidates({
+      policy: defaultPolicy("metadata_only"),
+      queries: ["query"],
+      limit: 1,
+      fetchImpl,
+      profile: { exclude_orgs: ["acme"], exclude_repos: [] },
+    });
+
+    assert.equal(candidates.length, 0);
   });
 });
 

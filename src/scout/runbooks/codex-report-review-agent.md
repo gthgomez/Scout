@@ -24,6 +24,8 @@ Validate Scout output, explain verdicts, and produce human-ready shortlists with
 - `github_write_action`
 
 ## Expected Scout CLI backend calls
+- `scout workflow run --profile <profile-id> --out-dir <dir>`
+  - preferred end-to-end safe recommendation workflow for Codex
 - `scout validate-report <report-path>`
   - reads report model and audit entries, then returns validation pass/fail + violation summary
 - `scout explain --candidate-id <candidate_id> --report <report-path>`
@@ -43,9 +45,11 @@ Validate Scout output, explain verdicts, and produce human-ready shortlists with
   - evidence IDs for every risk claim
   - whether each claim is `OBSERVED`, `INFERRED`, `PROPOSED`, or `UNKNOWN`
 - Must explicitly state setup caveats and unknowns instead of implying GitHub write capability or claim ownership.
+- Must preserve `run_status`, `collection_errors`, and `static_inspection_status` in user summaries.
 
 ## Safety stops
 - Do not claim, comment, or open issues/PRs from this report process.
+- Treat `manual_claim_possible` in `next_actions.json` as a human-only action, not authorization to post.
 - Do not infer maintainer approvals, ownership rights, or repo trust beyond evidence.
 - Re-run validation if `search_profile` or policy version changes.
 - If report references unsupported fields or inconsistent candidate IDs, fail closed and stop.

@@ -97,6 +97,7 @@ export function fromGitHubSearchItem(item, discoveredByQuery) {
     linked_prs: [],
     source_observations: [],
     collection_status: "PARTIAL",
+    static_inspection_status: "not_requested",
   };
 }
 
@@ -106,6 +107,8 @@ export async function discoverCandidates({
   limit = 50,
   fetchImpl = globalThis.fetch,
   auditLog = null,
+  collectionErrors = [],
+  profile = null,
   enrich = true,
 }) {
   recordAllowed(policy, "github_search_read", auditLog);
@@ -121,7 +124,9 @@ export async function discoverCandidates({
     url.searchParams.set("per_page", String(Math.min(50, limit)));
     const response = await fetchImpl(url, { headers: { Accept: "application/vnd.github+json" } });
     if (!response.ok) {
-      recordFailure(policy, "github_search_read", auditLog, `GitHub search failed with status ${response.status ?? "unknown"}.`);
+      const message = `GitHub search failed with status ${response.status ?? "unknown"}.`;
+      recordCollectionError(collectionErrors, "github_search_read", message, query);
+      recordFailure(policy, "github_search_read", auditLog, message);
       continue;
     }
     const body = await response.json();
@@ -130,7 +135,7 @@ export async function discoverCandidates({
       if (candidates.length >= limit) break;
     }
   }
-  const deduped = dedupeCandidates(candidates).slice(0, limit);
+  const deduped = applyProfileFilters(dedupeCandidates(candidates), profile).slice(0, limit);
   if (!enrich) {
     return deduped;
   }
@@ -188,6 +193,17 @@ export async function enrichCandidateMetadata({ policy, candidate, fetchImpl = g
   }
 
   return enriched;
+}
+
+function applyProfileFilters(candidates, profile) {
+  if (!profile) return candidates;
+  const excludedOrgs = new Set((profile.exclude_orgs ?? []).map((item) => item.toLowerCase()));
+  const excludedRepos = new Set((profile.exclude_repos ?? []).map((item) => item.toLowerCase()));
+  return candidates.filter((candidate) => {
+    const owner = candidate.repo_owner.toLowerCase();
+    const repo = `${candidate.repo_owner}/${candidate.repo_name}`.toLowerCase();
+    return !excludedOrgs.has(owner) && !excludedRepos.has(repo) && !excludedRepos.has(candidate.repo_name.toLowerCase());
+  });
 }
 
 async function fetchGitHubJson(url, fetchImpl, headers = {}) {
@@ -258,5 +274,15 @@ function recordFailure(policy, operation, auditLog, reason, candidateId = null) 
     decision: "failed",
     reason,
     candidate_id: candidateId,
+  });
+}
+
+function recordCollectionError(collectionErrors, operation, message, query = null) {
+  collectionErrors.push({
+    error_id: `collection-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    operation,
+    query,
+    message,
+    observed_at: new Date().toISOString(),
   });
 }
