@@ -1,0 +1,24 @@
+{
+  "validMonitorEvent": {
+    "event_id": "evt-001",
+    "profile_id": "profile-open-contribution",
+    "candidate_id": "SCOUT-alpha-green-1",
+    "observed_at": "2026-05-31T00:00:00.000Z",
+    "change_type": "new_candidate",
+    "current_verdict": "GREEN",
+    "previous_verdict": null,
+    "reason": "First pass score is strong and setup docs are present.",
+    "human_next_action": "Review manually before claim."
+  },
+  "invalidMonitorEvent": {
+    "event_id": "evt-002",
+    "profile_id": "profile-open-contribution",
+    "candidate_id": "SCOUT-alpha-green-1",
+    "observed_at": "2026-05-31T00:00:00.000Z",
+    "change_type": "invalid_change_type",
+    "current_verdict": "UNKNOWN",
+    "previous_verdict": "GREEN",
+    "reason": "Should fail enum checks.",
+    "human_next_action": "Review manually before claim."
+  }
+}

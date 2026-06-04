@@ -1,0 +1,59 @@
+{
+  "searchProfile": {
+    "profile_id": "profile-open-contribution",
+    "name": "Open Contribution",
+    "mode": "metadata_only",
+    "created_at": "2026-01-01T00:00:00.000Z",
+    "updated_at": "2026-01-02T00:00:00.000Z",
+    "languages": [
+      "Python",
+      "TypeScript"
+    ],
+    "labels": [
+      "good first issue",
+      "help wanted"
+    ],
+    "include_queries": [
+      "is:issue state:open sort:updated-desc"
+    ],
+    "exclude_orgs": [
+      "spam-org"
+    ],
+    "exclude_repos": [
+      "spam-org/legacy"
+    ],
+    "trusted_seed_lists": [
+      "starter-pack"
+    ],
+    "max_candidates": 30
+  },
+  "invalidModeProfile": {
+    "profile_id": "profile-invalid-mode",
+    "name": "Invalid Mode",
+    "mode": "dynamic_probe",
+    "created_at": "2026-01-01T00:00:00.000Z",
+    "updated_at": "2026-01-02T00:00:00.000Z",
+    "languages": [
+      "Python"
+    ],
+    "labels": [
+      "good first issue"
+    ],
+    "include_queries": [],
+    "exclude_orgs": [],
+    "exclude_repos": [],
+    "trusted_seed_lists": [],
+    "max_candidates": 25
+  },
+  "createdProfile": {
+    "name": "Open Contribution",
+    "mode": "metadata_only",
+    "max_candidates": 30,
+    "labels": [
+      "good first issue"
+    ],
+    "languages": [
+      "Python"
+    ]
+  }
+}

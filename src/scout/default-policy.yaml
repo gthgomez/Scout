@@ -1,0 +1,35 @@
+mode: metadata_only
+allowed_operations:
+  - github_search_read
+  - github_issue_metadata_read
+  - github_repo_metadata_read
+  - search_profile_read
+  - search_profile_write
+  - local_monitor_report_write
+  - report_write
+denied_operations:
+  - git_clone
+  - recursive_submodule_fetch
+  - package_install
+  - shell_command
+  - repo_script_execution
+  - docker_build
+  - docker_run
+  - github_comment
+  - github_fork
+  - github_branch_create
+  - github_push
+  - github_pr_open
+requires_approval:
+  - static_source_fetch
+  - archive_download
+  - package_registry_network
+  - full_network_egress
+  - github_write_action
+limits:
+  static_archive_max_mb: 100
+  static_file_count_max: 10000
+  repo_activity_days_green: 90
+  issue_freshness_days_green: 180
+  stale_issue_months_yellow_or_gray: 12
+  first_contribution_max_likely_files: 5

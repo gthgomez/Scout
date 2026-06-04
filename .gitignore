@@ -1,0 +1,11 @@
+node_modules/
+coverage/
+dist/
+*.log
+scout_report*.md
+scout_shortlist*.md
+scout_watch_report*.md
+.scout/
+.env
+.env.*
+!.env.example

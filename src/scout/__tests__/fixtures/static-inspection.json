@@ -1,0 +1,39 @@
+{
+  "safeManifest": [
+    { "path": "README.md", "size": 1024, "type": "file" },
+    { "path": "docs/setup.md", "size": 2048, "type": "file" },
+    { "path": "CHANGELOG.md", "size": 512, "type": "file" },
+    { "path": "docs/usage.md", "size": 64, "type": "file" }
+  ],
+  "unsafeManifest": [
+    { "path": "../secrets/credentials.env", "size": 100, "type": "file" },
+    { "path": "/etc/passwd", "size": 8, "type": "file" },
+    { "path": "safe-link", "size": 0, "type": "symlink", "linkTarget": "../outside/secret.txt" },
+    { "path": "src/main.py", "size": 200, "type": "file" }
+  ],
+  "limitManifest": [
+    { "path": "README.md", "size": 52428800, "type": "file" },
+    { "path": "docs/setup.md", "size": 10, "type": "file" },
+    { "path": "docs/notes.md", "size": 12, "type": "file" },
+    { "path": "docs/extra.md", "size": 13, "type": "file" }
+  ],
+  "traversalPaths": [
+    "../outside.md",
+    "docs/../../escape.md",
+    "%2e%2e/%2e%2e/encoded.md",
+    "assets/../valid.md"
+  ],
+  "absolutePaths": [
+    "/tmp/readme.md",
+    "C:\\Windows\\win.ini",
+    "\\\\server\\share\\secret.md",
+    "%2Ftmp%2Freadme.md"
+  ],
+  "pathAllowlistSamples": [
+    "README.md",
+    "docs/guide.md",
+    "src/main.py",
+    ".github/workflows/ci.yaml",
+    "build.gradle"
+  ]
+}

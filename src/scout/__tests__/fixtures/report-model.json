@@ -1,0 +1,128 @@
+{
+  "validReport": {
+    "candidates": [
+      {
+        "candidate_id": "SCOUT-alpha-green-1",
+        "repo_owner": "acme",
+        "repo_name": "tooling",
+        "repo_url": "https://github.com/acme/tooling",
+        "issue_title": "Add onboarding flow for new contributors",
+        "issue_url": "https://github.com/acme/tooling/issues/12",
+        "issue_number": 12,
+        "discovered_by_query": "is:issue state:open label:\"good first issue\" no:assignee language:Python",
+        "labels": [],
+        "assignees": [],
+        "linked_prs": [],
+        "source_observations": [
+          {
+            "evidence_id": "ev-1",
+            "candidate_id": "SCOUT-alpha-green-1",
+            "source_ref": "README.md",
+            "observed_at": "2026-05-30T00:00:00.000Z",
+            "claim": "Setup docs exist and describe install steps.",
+            "supports": "true",
+            "source_type": "STATIC_FILE",
+            "trust_level": "OBSERVED"
+          }
+        ],
+        "collection_status": "OBSERVED"
+      }
+    ],
+    "evidence": [
+      {
+        "evidence_id": "ev-1",
+        "candidate_id": "SCOUT-alpha-green-1",
+        "source_ref": "README.md",
+        "observed_at": "2026-05-30T00:00:00.000Z",
+        "claim": "Setup docs and test commands listed.",
+        "supports": "true",
+        "source_type": "STATIC_FILE",
+        "trust_level": "OBSERVED"
+      }
+    ],
+    "decisions": [
+      {
+        "candidate_id": "SCOUT-alpha-green-1",
+        "verdict": "GREEN",
+        "gap_codes": [],
+        "risk_summary": "No hard drop detected.",
+        "setup_status": "static_docs_ok",
+        "abandon_criteria": "Do not pursue if claimed or requires private credentials.",
+        "human_next_action": "Review manually before claiming.",
+        "drop_reason": null,
+        "score_reasons": ["+25 issue clarity"],
+        "portfolio_reasons": ["+10 contributor guide"]
+      }
+    ],
+    "command_attempts": [
+      {
+        "candidate_id": "SCOUT-alpha-green-1",
+        "command": "npm run test",
+        "status": "not_run",
+        "reason": "Not executed in metadata-only mode.",
+        "observed_at": "2026-05-30T00:00:00.000Z"
+      }
+    ],
+    "audit_events": [],
+    "monitor_events": []
+  },
+  "falseSetupClaimReport": {
+    "candidates": [
+      {
+        "candidate_id": "SCOUT-alpha-green-1",
+        "repo_owner": "acme",
+        "repo_name": "tooling",
+        "repo_url": "https://github.com/acme/tooling",
+        "issue_title": "Add onboarding flow for new contributors",
+        "issue_url": "https://github.com/acme/tooling/issues/12",
+        "issue_number": 12,
+        "discovered_by_query": "is:issue state:open label:\"good first issue\" no:assignee language:Python",
+        "labels": [],
+        "assignees": [],
+        "linked_prs": [],
+        "source_observations": [
+          {
+            "evidence_id": "ev-1",
+            "candidate_id": "SCOUT-alpha-green-1",
+            "source_ref": "README.md",
+            "observed_at": "2026-05-30T00:00:00.000Z",
+            "claim": "Setup docs exist and describe install steps.",
+            "supports": "true",
+            "source_type": "STATIC_FILE",
+            "trust_level": "OBSERVED"
+          }
+        ],
+        "collection_status": "OBSERVED"
+      }
+    ],
+    "evidence": [
+      {
+        "evidence_id": "ev-1",
+        "candidate_id": "SCOUT-alpha-green-1",
+        "source_ref": "README.md",
+        "observed_at": "2026-05-30T00:00:00.000Z",
+        "claim": "Setup docs and test commands listed.",
+        "supports": "true",
+        "source_type": "STATIC_FILE",
+        "trust_level": "OBSERVED"
+      }
+    ],
+    "decisions": [
+      {
+        "candidate_id": "SCOUT-alpha-green-1",
+        "verdict": "GREEN",
+        "gap_codes": [],
+        "risk_summary": "No hard drop detected.",
+        "setup_status": "passed",
+        "abandon_criteria": "Do not pursue if claimed or requires private credentials.",
+        "human_next_action": "Review manually before claiming.",
+        "drop_reason": null,
+        "score_reasons": ["+25 issue clarity"],
+        "portfolio_reasons": ["+10 contributor guide"]
+      }
+    ],
+    "command_attempts": [],
+    "audit_events": [],
+    "monitor_events": []
+  }
+}

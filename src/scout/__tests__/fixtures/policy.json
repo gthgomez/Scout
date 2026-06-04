@@ -1,0 +1,68 @@
+{
+  "metadata_only": {
+    "mode": "metadata_only",
+    "allowed_operations": [
+      "github_search_read",
+      "github_issue_metadata_read",
+      "github_repo_metadata_read",
+      "search_profile_read",
+      "search_profile_write",
+      "local_monitor_report_write",
+      "report_write"
+    ],
+    "denied_operations": [
+      "git_clone",
+      "recursive_submodule_fetch",
+      "package_install",
+      "shell_command",
+      "repo_script_execution",
+      "docker_build",
+      "docker_run",
+      "github_comment",
+      "github_fork",
+      "github_branch_create",
+      "github_push",
+      "github_pr_open",
+      "github_write_action"
+    ],
+    "requires_approval": [
+      "static_source_fetch",
+      "archive_download",
+      "package_registry_network",
+      "full_network_egress",
+      "github_write_action"
+    ]
+  },
+  "static_inspection": {
+    "mode": "static_inspection",
+    "allowed_operations": [
+      "github_search_read",
+      "github_issue_metadata_read",
+      "github_repo_metadata_read",
+      "search_profile_read",
+      "search_profile_write",
+      "local_monitor_report_write",
+      "report_write",
+      "static_source_fetch",
+      "archive_download",
+      "static_file_read"
+    ],
+    "denied_operations": [
+      "git_clone",
+      "recursive_submodule_fetch",
+      "package_install",
+      "shell_command",
+      "repo_script_execution",
+      "docker_build",
+      "docker_run",
+      "github_comment",
+      "github_fork",
+      "github_branch_create",
+      "github_push",
+      "github_pr_open",
+      "github_write_action"
+    ]
+  },
+  "single_denial_op": "git_clone",
+  "approval_op": "static_source_fetch"
+}

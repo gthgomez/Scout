@@ -1,0 +1,138 @@
+{
+  "greenCandidate": {
+    "candidate_id": "SCOUT-alpha-green-1",
+    "issue_title": "Add onboarding flow for new contributors",
+    "latest_repo_activity_at": "2026-05-30T00:00:00.000Z",
+    "latest_maintainer_activity_at": "2026-05-31T00:00:00.000Z",
+    "source_observations": [
+      {
+        "kind": "setup_docs",
+        "value": "README mentions setup"
+      },
+      {
+        "kind": "tests_present",
+        "value": "Unit tests folder exists"
+      }
+    ],
+    "primary_language": "Python",
+    "estimated_files_touched": 3,
+    "updated_at": "2026-05-30T00:00:00.000Z",
+    "requires_private_credentials": false,
+    "claimed_in_comments": false,
+    "linked_prs": [],
+    "archived": false,
+    "issue_state": "open",
+    "assignees": [],
+    "collection_status": "OBSERVED"
+  },
+  "partialCandidate": {
+    "candidate_id": "SCOUT-alpha-partial-1",
+    "issue_title": "Fix bug",
+    "latest_repo_activity_at": "2026-05-30T00:00:00.000Z",
+    "latest_maintainer_activity_at": null,
+    "source_observations": [
+      {
+        "kind": "tests_present",
+        "value": "Some tests"
+      }
+    ],
+    "primary_language": "Python",
+    "estimated_files_touched": 8,
+    "updated_at": "2026-05-30T00:00:00.000Z",
+    "requires_private_credentials": false,
+    "claimed_in_comments": false,
+    "linked_prs": [],
+    "archived": false,
+    "issue_state": "open",
+    "assignees": [],
+    "collection_status": "PARTIAL"
+  },
+  "staleCandidate": {
+    "candidate_id": "SCOUT-alpha-stale-1",
+    "issue_title": "Improve caching layer docs",
+    "latest_repo_activity_at": "2024-12-31T00:00:00.000Z",
+    "latest_maintainer_activity_at": "2024-12-31T00:00:00.000Z",
+    "source_observations": [
+      {
+        "kind": "setup_docs",
+        "value": "Setup docs"
+      }
+    ],
+    "primary_language": "TypeScript",
+    "estimated_files_touched": 2,
+    "updated_at": "2024-12-01T00:00:00.000Z",
+    "requires_private_credentials": false,
+    "claimed_in_comments": false,
+    "linked_prs": [],
+    "archived": false,
+    "issue_state": "open",
+    "assignees": [],
+    "collection_status": "OBSERVED"
+  },
+  "archivedCandidate": {
+    "candidate_id": "SCOUT-alpha-archived-1",
+    "issue_title": "Refactor login modal",
+    "latest_repo_activity_at": "2026-05-30T00:00:00.000Z",
+    "latest_maintainer_activity_at": "2026-05-30T00:00:00.000Z",
+    "source_observations": [
+      {
+        "kind": "setup_docs",
+        "value": "Guides present"
+      }
+    ],
+    "primary_language": "JavaScript",
+    "estimated_files_touched": 1,
+    "updated_at": "2026-05-30T00:00:00.000Z",
+    "requires_private_credentials": false,
+    "claimed_in_comments": false,
+    "linked_prs": [],
+    "archived": true,
+    "issue_state": "open",
+    "assignees": [],
+    "collection_status": "OBSERVED"
+  },
+  "privateCredentialCandidate": {
+    "candidate_id": "SCOUT-alpha-private-1",
+    "issue_title": "Add secure export integration",
+    "latest_repo_activity_at": "2026-05-30T00:00:00.000Z",
+    "latest_maintainer_activity_at": "2026-05-30T00:00:00.000Z",
+    "source_observations": [
+      {
+        "kind": "setup_docs",
+        "value": "No setup docs"
+      }
+    ],
+    "primary_language": "Python",
+    "estimated_files_touched": 4,
+    "updated_at": "2026-05-30T00:00:00.000Z",
+    "requires_private_credentials": true,
+    "claimed_in_comments": false,
+    "linked_prs": [],
+    "archived": false,
+    "issue_state": "open",
+    "assignees": [],
+    "collection_status": "OBSERVED"
+  },
+  "claimedCandidate": {
+    "candidate_id": "SCOUT-alpha-claimed-1",
+    "issue_title": "Document API error handling",
+    "latest_repo_activity_at": "2026-05-30T00:00:00.000Z",
+    "latest_maintainer_activity_at": "2026-05-30T00:00:00.000Z",
+    "source_observations": [
+      {
+        "kind": "setup_docs",
+        "value": "Setup docs"
+      }
+    ],
+    "primary_language": "Python",
+    "estimated_files_touched": 1,
+    "updated_at": "2026-05-30T00:00:00.000Z",
+    "requires_private_credentials": false,
+    "claimed_in_comments": true,
+    "linked_prs": [],
+    "archived": false,
+    "issue_state": "open",
+    "assignees": [],
+    "collection_status": "OBSERVED"
+  }
+}
