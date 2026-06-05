@@ -47,8 +47,12 @@ export function applyIssueMetadata(candidate, issue) {
 
 function latestMaintainerComment(comments) {
   return comments
-    .filter((comment) => ["OWNER", "MEMBER", "COLLABORATOR"].includes(comment.authorAssociation))
+    .filter((comment) => ["OWNER", "MEMBER", "COLLABORATOR"].includes(authorAssociationOf(comment)))
     .sort((a, b) => new Date(b.updatedAt ?? b.updated_at ?? 0) - new Date(a.updatedAt ?? a.updated_at ?? 0))[0];
+}
+
+function authorAssociationOf(comment) {
+  return comment.authorAssociation ?? comment.author_association;
 }
 
 function normalizeLinkedPr(pr) {
@@ -71,7 +75,7 @@ function issueAppearsClaimed(comments) {
   });
 }
 
-export function fromGitHubSearchItem(item, discoveredByQuery) {
+export function fromGitHubSearchItem(item, discoveredByQuery, queryDescriptor = null) {
   const repoUrl = item.repository_url ?? "";
   const [repoOwner = "unknown", repoName = "unknown"] = repoUrl.split("/repos/")[1]?.split("/") ?? [];
   return {
@@ -95,7 +99,7 @@ export function fromGitHubSearchItem(item, discoveredByQuery) {
     latest_repo_activity_at: null,
     latest_maintainer_activity_at: null,
     linked_prs: [],
-    source_observations: [],
+    source_observations: sourceObservationsFromQuery(queryDescriptor),
     collection_status: "PARTIAL",
     static_inspection_status: "not_requested",
   };
@@ -117,21 +121,25 @@ export async function discoverCandidates({
   }
 
   const candidates = [];
-  for (const query of queries) {
+  for (const queryEntry of queries) {
     if (candidates.length >= limit) break;
+    const queryDescriptor = normalizeQueryDescriptor(queryEntry);
+    const query = queryDescriptor.query;
     const url = new URL("https://api.github.com/search/issues");
     url.searchParams.set("q", query);
     url.searchParams.set("per_page", String(Math.min(50, limit)));
     const response = await fetchImpl(url, { headers: { Accept: "application/vnd.github+json" } });
+    const rateLimit = gitHubRateLimitFromHeaders(response.headers);
+    recordRateLimitObservation(auditLog, policy, "github_search_read", rateLimit, query);
     if (!response.ok) {
       const message = `GitHub search failed with status ${response.status ?? "unknown"}.`;
-      recordCollectionError(collectionErrors, "github_search_read", message, query);
+      recordCollectionError(collectionErrors, "github_search_read", message, query, rateLimit);
       recordFailure(policy, "github_search_read", auditLog, message);
       continue;
     }
     const body = await response.json();
     for (const item of body.items ?? []) {
-      candidates.push(fromGitHubSearchItem(item, query));
+      candidates.push(fromGitHubSearchItem(item, query, queryDescriptor));
       if (candidates.length >= limit) break;
     }
   }
@@ -146,17 +154,43 @@ export async function discoverCandidates({
   return enriched;
 }
 
+function normalizeQueryDescriptor(queryEntry) {
+  if (typeof queryEntry === "string") {
+    return { query: queryEntry };
+  }
+  if (!queryEntry || typeof queryEntry !== "object" || typeof queryEntry.query !== "string" || queryEntry.query.length === 0) {
+    throw new Error("Discovery queries must be strings or query descriptor objects with a query string.");
+  }
+  return queryEntry;
+}
+
+function sourceObservationsFromQuery(queryDescriptor) {
+  if (queryDescriptor?.kind !== "trusted_seed_list") {
+    return [];
+  }
+  return [
+    {
+      kind: "trusted_seed_list",
+      value: queryDescriptor.seed_list_id,
+      repo: queryDescriptor.repo,
+    },
+  ];
+}
+
 export async function enrichCandidateMetadata({ policy, candidate, fetchImpl = globalThis.fetch, auditLog = null }) {
   let enriched = candidate;
   const metadataErrors = [];
+  const rateLimitObservations = [];
 
   try {
     recordAllowed(policy, "github_repo_metadata_read", auditLog, candidate.candidate_id);
-    const repository = await fetchGitHubJson(
+    const repositoryResponse = await fetchGitHubJsonWithMetadata(
       `https://api.github.com/repos/${candidate.repo_owner}/${candidate.repo_name}`,
       fetchImpl,
     );
-    enriched = applyRepositoryMetadata(enriched, repository);
+    recordRateLimitObservation(auditLog, policy, "github_repo_metadata_read", repositoryResponse.rate_limit, candidate.candidate_id);
+    pushRateLimitObservation(rateLimitObservations, "github_repo_metadata_read", repositoryResponse.rate_limit);
+    enriched = applyRepositoryMetadata(enriched, repositoryResponse.body);
   } catch (error) {
     if (error.code === "SCOUT_POLICY_DENIED") throw error;
     metadataErrors.push(`repo metadata: ${error.message}`);
@@ -165,10 +199,13 @@ export async function enrichCandidateMetadata({ policy, candidate, fetchImpl = g
 
   try {
     recordAllowed(policy, "github_issue_metadata_read", auditLog, candidate.candidate_id);
-    const issue = await fetchGitHubJson(
+    const issueResponse = await fetchGitHubJsonWithMetadata(
       `https://api.github.com/repos/${candidate.repo_owner}/${candidate.repo_name}/issues/${candidate.issue_number}`,
       fetchImpl,
     );
+    const issue = issueResponse.body;
+    recordRateLimitObservation(auditLog, policy, "github_issue_metadata_read", issueResponse.rate_limit, candidate.candidate_id);
+    pushRateLimitObservation(rateLimitObservations, "github_issue_metadata_read", issueResponse.rate_limit);
     const comments = await fetchIssueComments({ issue, candidate, fetchImpl });
     const timelineItems = await fetchIssueTimeline({ candidate, fetchImpl });
     enriched = applyIssueMetadata(enriched, { ...issue, comments, linked_prs: linkedPrsFromTimeline(timelineItems) });
@@ -184,6 +221,7 @@ export async function enrichCandidateMetadata({ policy, candidate, fetchImpl = g
       collection_status: enriched.collection_status === "OBSERVED" ? "PARTIAL" : enriched.collection_status,
       source_observations: [
         ...(enriched.source_observations ?? []),
+        ...rateLimitObservations,
         {
           kind: "metadata_error",
           value: metadataErrors.join("; "),
@@ -192,7 +230,10 @@ export async function enrichCandidateMetadata({ policy, candidate, fetchImpl = g
     };
   }
 
-  return enriched;
+  return {
+    ...enriched,
+    source_observations: [...(enriched.source_observations ?? []), ...rateLimitObservations],
+  };
 }
 
 function applyProfileFilters(candidates, profile) {
@@ -206,7 +247,7 @@ function applyProfileFilters(candidates, profile) {
   });
 }
 
-async function fetchGitHubJson(url, fetchImpl, headers = {}) {
+async function fetchGitHubJsonWithMetadata(url, fetchImpl, headers = {}) {
   const response = await fetchImpl(url, {
     headers: {
       Accept: "application/vnd.github+json",
@@ -216,7 +257,15 @@ async function fetchGitHubJson(url, fetchImpl, headers = {}) {
   if (!response.ok) {
     throw new Error(`GitHub API request failed for ${url} with status ${response.status ?? "unknown"}`);
   }
-  return response.json();
+  return {
+    body: await response.json(),
+    rate_limit: gitHubRateLimitFromHeaders(response.headers),
+  };
+}
+
+async function fetchGitHubJson(url, fetchImpl, headers = {}) {
+  const response = await fetchGitHubJsonWithMetadata(url, fetchImpl, headers);
+  return response.body;
 }
 
 async function fetchIssueComments({ issue, candidate, fetchImpl }) {
@@ -277,12 +326,65 @@ function recordFailure(policy, operation, auditLog, reason, candidateId = null) 
   });
 }
 
-function recordCollectionError(collectionErrors, operation, message, query = null) {
+function recordCollectionError(collectionErrors, operation, message, query = null, rateLimit = null) {
   collectionErrors.push({
     error_id: `collection-${Date.now()}-${Math.random().toString(16).slice(2)}`,
     operation,
     query,
+    rate_limit: rateLimit,
     message,
     observed_at: new Date().toISOString(),
+  });
+}
+
+function gitHubRateLimitFromHeaders(headers) {
+  const limit = readHeaderNumber(headers, "x-ratelimit-limit");
+  const remaining = readHeaderNumber(headers, "x-ratelimit-remaining");
+  const reset = readHeaderNumber(headers, "x-ratelimit-reset");
+  const resource = readHeaderString(headers, "x-ratelimit-resource");
+  const used = readHeaderNumber(headers, "x-ratelimit-used");
+  if (limit === null && remaining === null && reset === null && resource === null && used === null) {
+    return null;
+  }
+  return {
+    limit,
+    remaining,
+    reset_at: reset === null ? null : new Date(reset * 1000).toISOString(),
+    resource,
+    used,
+  };
+}
+
+function readHeaderNumber(headers, name) {
+  const value = readHeaderString(headers, name);
+  if (value === null) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function readHeaderString(headers, name) {
+  const value = headers?.get?.(name);
+  if (value === undefined || value === null || value === "") return null;
+  return String(value);
+}
+
+function pushRateLimitObservation(observations, operation, rateLimit) {
+  if (!rateLimit) return;
+  observations.push({
+    kind: "github_rate_limit",
+    value: `${operation}: ${rateLimit.remaining ?? "unknown"}/${rateLimit.limit ?? "unknown"} remaining`,
+    operation,
+    rate_limit: rateLimit,
+  });
+}
+
+function recordRateLimitObservation(auditLog, policy, operation, rateLimit, candidateId = null) {
+  if (!rateLimit) return;
+  auditLog?.record({
+    operation,
+    mode: policy.mode,
+    decision: "observed",
+    reason: `GitHub rate limit ${rateLimit.remaining ?? "unknown"}/${rateLimit.limit ?? "unknown"} remaining for ${rateLimit.resource ?? "unknown"} resource.`,
+    candidate_id: candidateId,
   });
 }

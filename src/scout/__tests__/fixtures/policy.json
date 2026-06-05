@@ -28,9 +28,21 @@
     "requires_approval": [
       "static_source_fetch",
       "archive_download",
+      "sandbox_create",
+      "sandbox_source_stage",
+      "sandbox_command_run",
+      "sandbox_artifact_read",
+      "sandbox_destroy",
       "package_registry_network",
       "full_network_egress",
       "github_write_action"
+    ],
+    "sandbox_operations": [
+      "sandbox_create",
+      "sandbox_source_stage",
+      "sandbox_command_run",
+      "sandbox_artifact_read",
+      "sandbox_destroy"
     ]
   },
   "static_inspection": {

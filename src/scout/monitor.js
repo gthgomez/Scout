@@ -1,5 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { DEFAULT_THRESHOLDS } from "./triage.js";
 import { validateMonitorEvent } from "./validators.js";
 
 const verdictRank = { GREEN: 4, YELLOW: 3, GRAY: 2, RED: 1 };
@@ -19,9 +20,25 @@ export function diffReports(previousDecisions, currentDecisions, profileId) {
       continue;
     }
     if (verdictRank[current.verdict] > verdictRank[previous.verdict]) {
-      events.push(createMonitorEvent(profileId, current, previous.verdict, "verdict_improved", "Candidate verdict improved."));
+      events.push(
+        createMonitorEvent(
+          profileId,
+          current,
+          previous.verdict,
+          "verdict_improved",
+          verdictChangeReason(previous, current, "Candidate verdict improved."),
+        ),
+      );
     } else if (verdictRank[current.verdict] < verdictRank[previous.verdict]) {
-      events.push(createMonitorEvent(profileId, current, previous.verdict, "verdict_downgraded", "Candidate verdict downgraded."));
+      events.push(
+        createMonitorEvent(
+          profileId,
+          current,
+          previous.verdict,
+          "verdict_downgraded",
+          verdictChangeReason(previous, current, "Candidate verdict downgraded."),
+        ),
+      );
     }
   }
   for (const previous of previousDecisions) {
@@ -30,6 +47,21 @@ export function diffReports(previousDecisions, currentDecisions, profileId) {
     }
   }
   return events.map(validateMonitorEvent);
+}
+
+function verdictChangeReason(previous, current, fallback) {
+  if (!thresholdPolicyChanged(previous, current)) {
+    return fallback;
+  }
+  return `${fallback} Threshold policy changed.`;
+}
+
+function thresholdPolicyChanged(previous, current) {
+  return JSON.stringify(effectiveThresholds(previous)) !== JSON.stringify(effectiveThresholds(current));
+}
+
+function effectiveThresholds(decision) {
+  return decision.threshold_policy?.effective_thresholds ?? DEFAULT_THRESHOLDS;
 }
 
 export function monitorStoreDir(root = process.cwd()) {

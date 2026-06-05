@@ -90,41 +90,68 @@ describe("discovery mapping", () => {
     assert.equal(candidate.collection_status, "OBSERVED");
   });
 
+  it("recognizes REST maintainer author association fields", () => {
+    const candidate = applyIssueMetadata(
+      { candidate_id: "c", collection_status: "PARTIAL", linked_prs: [] },
+      {
+        comments: [
+          {
+            author_association: "MEMBER",
+            body: "Thanks for reporting.",
+            updated_at: "2026-06-04T00:00:00Z",
+          },
+        ],
+      },
+    );
+
+    assert.equal(candidate.latest_maintainer_activity_at, "2026-06-04T00:00:00Z");
+    assert.equal(candidate.collection_status, "OBSERVED");
+  });
+
   it("discovers and enriches candidate metadata through allowed GitHub reads", async () => {
     const calls = [];
     const fetchImpl = async (url) => {
       calls.push(String(url));
       if (String(url).includes("/search/issues")) {
-        return okJson({
-          items: [
-            {
-              repository_url: "https://api.github.com/repos/acme/tooling",
-              number: 42,
-              title: "Fix docs typo",
-              html_url: "https://github.com/acme/tooling/issues/42",
-              labels: [{ name: "good first issue" }],
-              state: "open",
-              assignees: [],
-              created_at: "2026-06-01T00:00:00Z",
-              updated_at: "2026-06-02T00:00:00Z",
-              comments_url: "https://api.github.com/repos/acme/tooling/issues/42/comments",
-            },
-          ],
-        });
+        return okJson(
+          {
+            items: [
+              {
+                repository_url: "https://api.github.com/repos/acme/tooling",
+                number: 42,
+                title: "Fix docs typo",
+                html_url: "https://github.com/acme/tooling/issues/42",
+                labels: [{ name: "good first issue" }],
+                state: "open",
+                assignees: [],
+                created_at: "2026-06-01T00:00:00Z",
+                updated_at: "2026-06-02T00:00:00Z",
+                comments_url: "https://api.github.com/repos/acme/tooling/issues/42/comments",
+              },
+            ],
+          },
+          { "x-ratelimit-limit": "100", "x-ratelimit-remaining": "98", "x-ratelimit-reset": "1780000000", "x-ratelimit-resource": "search" },
+        );
       }
       if (String(url).endsWith("/repos/acme/tooling")) {
-        return okJson({
-          archived: false,
-          default_branch: "main",
-          language: "TypeScript",
-          license: { spdx_id: "MIT" },
-          pushed_at: "2026-06-03T00:00:00Z",
-        });
+        return okJson(
+          {
+            archived: false,
+            default_branch: "main",
+            language: "TypeScript",
+            license: { spdx_id: "MIT" },
+            pushed_at: "2026-06-03T00:00:00Z",
+          },
+          { "x-ratelimit-limit": "5000", "x-ratelimit-remaining": "4999", "x-ratelimit-reset": "1780000000", "x-ratelimit-resource": "core" },
+        );
       }
       if (String(url).endsWith("/issues/42")) {
-        return okJson({
-          comments_url: "https://api.github.com/repos/acme/tooling/issues/42/comments",
-        });
+        return okJson(
+          {
+            comments_url: "https://api.github.com/repos/acme/tooling/issues/42/comments",
+          },
+          { "x-ratelimit-limit": "5000", "x-ratelimit-remaining": "4998", "x-ratelimit-reset": "1780000000", "x-ratelimit-resource": "core" },
+        );
       }
       if (String(url).endsWith("/issues/42/comments")) {
         return okJson([
@@ -154,8 +181,10 @@ describe("discovery mapping", () => {
     assert.equal(candidates[0].collection_status, "OBSERVED");
     assert.equal(candidates[0].primary_language, "TypeScript");
     assert.equal(candidates[0].latest_maintainer_activity_at, "2026-06-04T00:00:00Z");
+    assert.ok(candidates[0].source_observations.some((item) => item.kind === "github_rate_limit"));
     assert.ok(calls.some((url) => url.endsWith("/repos/acme/tooling")));
     assert.ok(auditLog.all().some((event) => event.operation === "github_repo_metadata_read"));
+    assert.ok(auditLog.all().some((event) => event.decision === "observed" && event.reason.includes("4999/5000")));
   });
 
   it("retains partial candidates when enrichment metadata fails", async () => {
@@ -197,13 +226,19 @@ describe("discovery mapping", () => {
       policy: defaultPolicy("metadata_only"),
       queries: ["query"],
       limit: 1,
-      fetchImpl: async () => ({ ok: false, status: 403, json: async () => ({}) }),
+      fetchImpl: async () => ({
+        ok: false,
+        status: 403,
+        headers: { get: (name) => ({ "x-ratelimit-limit": "100", "x-ratelimit-remaining": "0" })[name.toLowerCase()] ?? null },
+        json: async () => ({}),
+      }),
       collectionErrors,
     });
 
     assert.equal(candidates.length, 0);
     assert.equal(collectionErrors.length, 1);
     assert.equal(collectionErrors[0].operation, "github_search_read");
+    assert.equal(collectionErrors[0].rate_limit.remaining, 0);
     assert.match(collectionErrors[0].message, /403/);
   });
 
@@ -238,12 +273,88 @@ describe("discovery mapping", () => {
 
     assert.equal(candidates.length, 0);
   });
+
+  it("keeps trusted seed-list provenance on descriptor queries", async () => {
+    const candidates = await discoverCandidates({
+      policy: defaultPolicy("metadata_only"),
+      queries: [
+        {
+          query: 'repo:acme/tooling is:issue state:open label:"good first issue" no:assignee language:Python',
+          kind: "trusted_seed_list",
+          seed_list_id: "starter-pack",
+          repo: "acme/tooling",
+        },
+      ],
+      limit: 1,
+      enrich: false,
+      fetchImpl: async () =>
+        okJson({
+          items: [
+            {
+              repository_url: "https://api.github.com/repos/acme/tooling",
+              number: 42,
+              title: "Fix docs typo",
+              html_url: "https://github.com/acme/tooling/issues/42",
+              labels: [{ name: "good first issue" }],
+              state: "open",
+              assignees: [],
+              updated_at: "2026-06-02T00:00:00Z",
+            },
+          ],
+        }),
+    });
+
+    assert.equal(candidates[0].discovered_by_query, 'repo:acme/tooling is:issue state:open label:"good first issue" no:assignee language:Python');
+    assert.deepEqual(candidates[0].source_observations[0], {
+      kind: "trusted_seed_list",
+      value: "starter-pack",
+      repo: "acme/tooling",
+    });
+  });
+
+  it("lets profile excludes override trusted seed-list inclusion", async () => {
+    const candidates = await discoverCandidates({
+      policy: defaultPolicy("metadata_only"),
+      queries: [
+        {
+          query: 'repo:acme/tooling is:issue state:open label:"good first issue" no:assignee language:Python',
+          kind: "trusted_seed_list",
+          seed_list_id: "starter-pack",
+          repo: "acme/tooling",
+        },
+      ],
+      limit: 1,
+      profile: { exclude_orgs: [], exclude_repos: ["acme/tooling"] },
+      fetchImpl: async (url) => {
+        if (String(url).includes("/search/issues")) {
+          return okJson({
+            items: [
+              {
+                repository_url: "https://api.github.com/repos/acme/tooling",
+                number: 42,
+                title: "Fix docs typo",
+                html_url: "https://github.com/acme/tooling/issues/42",
+                labels: [{ name: "good first issue" }],
+                state: "open",
+                assignees: [],
+                updated_at: "2026-06-02T00:00:00Z",
+              },
+            ],
+          });
+        }
+        throw new Error("excluded seed candidates should not be enriched");
+      },
+    });
+
+    assert.equal(candidates.length, 0);
+  });
 });
 
-function okJson(body) {
+function okJson(body, headers = {}) {
   return {
     ok: true,
     status: 200,
+    headers: { get: (name) => headers[name.toLowerCase()] ?? null },
     json: async () => body,
   };
 }

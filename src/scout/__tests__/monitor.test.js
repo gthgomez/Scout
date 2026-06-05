@@ -4,6 +4,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { diffReports, loadMonitorSnapshot, saveMonitorSnapshot } from "../monitor.js";
+import { resolveThresholds } from "../triage.js";
 
 describe("monitor snapshots", () => {
   it("records new candidates and persists local snapshots", async () => {
@@ -42,5 +43,32 @@ describe("monitor snapshots", () => {
     assert.equal(events[0].change_type, "candidate_missing");
     assert.equal(events[0].previous_verdict, "GREEN");
     assert.equal(events[0].current_verdict, "GRAY");
+  });
+
+  it("marks verdict changes driven by threshold policy changes", () => {
+    const previousDecision = {
+      candidate_id: "SCOUT-alpha-green-1",
+      verdict: "GREEN",
+      human_next_action: "Review manually before claiming.",
+      threshold_policy: {
+        profile_id: "profile-alpha",
+        threshold_overrides: {},
+        effective_thresholds: resolveThresholds({}),
+      },
+    };
+    const currentDecision = {
+      ...previousDecision,
+      verdict: "YELLOW",
+      threshold_policy: {
+        profile_id: "profile-alpha",
+        threshold_overrides: { green_min_score: 101 },
+        effective_thresholds: resolveThresholds({ green_min_score: 101 }),
+      },
+    };
+    const events = diffReports([previousDecision], [currentDecision], "profile-alpha");
+
+    assert.equal(events.length, 1);
+    assert.equal(events[0].change_type, "verdict_downgraded");
+    assert.match(events[0].reason, /Threshold policy changed/);
   });
 });

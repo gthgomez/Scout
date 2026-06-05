@@ -24,10 +24,13 @@ Validate Scout output, explain verdicts, and produce human-ready shortlists with
 - `github_write_action`
 
 ## Expected Scout CLI backend calls
+Use `scout --help` for the top-level command list. Subcommands do not provide separate `--help` output.
+
 - `scout workflow run --profile <profile-id> --out-dir <dir>`
   - preferred end-to-end safe recommendation workflow for Codex
-- `scout validate-report <report-path>`
+- `scout validate-report --report <report-path>`
   - reads report model and audit entries, then returns validation pass/fail + violation summary
+  - fails when candidates lack matching triage decisions
 - `scout explain --candidate-id <candidate_id> --report <report-path>`
   - resolves verdict rationale, gap codes, risk summary, and `human_next_action`
 - `scout export-shortlist --report <report-path> --limit <n> --out <path>`
@@ -36,20 +39,19 @@ Validate Scout output, explain verdicts, and produce human-ready shortlists with
   - optional re-run to refresh evidence before final handoff
 
 ## Output expectations
-- Produce one final artifact per invocation:
-  - validated report (`scout_report.md` style) or shortlist (`scout_shortlist.md`)
-- Verdict tables should preserve:
-  - `GREEN / YELLOW / GRAY / RED` with rank and scores
-  - `drop_reason` when present, never omitted for dropped candidates
-- `explain` outputs should include:
-  - evidence IDs for every risk claim
-  - whether each claim is `OBSERVED`, `INFERRED`, `PROPOSED`, or `UNKNOWN`
+- Current artifacts are Markdown reports (`scout_report.md` style), shortlist Markdown (`scout_shortlist.md`), explain Markdown emitted to stdout, and JSON report models supplied through `--report`.
+- JSON report fields include `run_status`, `collection_errors`, `candidates`, `evidence`, `decisions`, `audit_events`, `monitor_events`, `command_attempts`, and optional `sandbox_runs`, `probe_config`, and `probe_status`.
+- Markdown verdict tables preserve `GREEN / YELLOW / GRAY / RED`, rank, scores, setup status, risk summary, next action, and evidence IDs for recommended candidates.
+- Dropped candidate tables preserve `drop_reason` when present.
+- `explain` output includes evidence IDs for risk claims and marks each claim `OBSERVED`, `INFERRED`, `PROPOSED`, or `UNKNOWN`.
 - Must explicitly state setup caveats and unknowns instead of implying GitHub write capability or claim ownership.
 - Must preserve `run_status`, `collection_errors`, and `static_inspection_status` in user summaries.
+- Must not summarize `GREEN` candidates as setup-safe unless `setup_status` is `static_docs_ok`; candidates without setup guidance remain at most `YELLOW`.
 
 ## Safety stops
 - Do not claim, comment, or open issues/PRs from this report process.
 - Treat `manual_claim_possible` in `next_actions.json` as a human-only action, not authorization to post.
 - Do not infer maintainer approvals, ownership rights, or repo trust beyond evidence.
+- Do not call `scout probe` from report review; if a user approves a dynamic probe, hand off to the Dynamic Probe Agent runbook and revalidate the resulting probe report.
 - Re-run validation if `search_profile` or policy version changes.
 - If report references unsupported fields or inconsistent candidate IDs, fail closed and stop.
