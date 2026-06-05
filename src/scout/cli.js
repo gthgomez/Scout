@@ -11,13 +11,15 @@ import {
   queriesFromProfile,
   saveSearchProfile,
 } from "./profiles.js";
+import { loadTrustedSeedLists } from "./seed-lists.js";
 import { triageCandidates } from "./triage.js";
 import { createReportModel, exportShortlist, explainCandidate, renderMarkdownReport } from "./report.js";
 import {
-  dynamicProbeUnavailable,
   evidenceFromStaticInspection,
+  inspectCandidateStaticArchive,
   inspectCandidateStaticManifest,
 } from "./static-inspection.js";
+import { DEFAULT_SANDBOX_POLICY, DockerSandboxRunner, probeDoctor, runProbe } from "./probe.js";
 import { validateReportModel } from "./validators.js";
 
 async function main(argv) {
@@ -55,8 +57,7 @@ async function main(argv) {
     return workflow(args);
   }
   if (command === "probe") {
-    dynamicProbeUnavailable();
-    return 0;
+    return probeCommand(args);
   }
   if (command === "test-policy") {
     console.log("Policy tests are available through npm test.");
@@ -74,6 +75,11 @@ async function validateReportCommand(args) {
   const report = await loadReport(reportPath);
   validateDecisionReferences(report);
   const decisionCoverage = ensureDecisionCoverage(report);
+  if (decisionCoverage.missing > 0) {
+    throw new Error(
+      `Report validation failed: ${decisionCoverage.missing} candidate(s) lack triage decisions.`,
+    );
+  }
   console.log(`Report validation passed for ${reportPath}.`);
   console.log(`Candidates: ${report.candidates.length}`);
   console.log(`Decisions: ${report.decisions.length}`);
@@ -113,6 +119,59 @@ async function exportShortlistCommand(args) {
   return 0;
 }
 
+async function probeCommand(args) {
+  if (args[0] === "doctor") {
+    const image = readArg(args, "--image", DEFAULT_SANDBOX_POLICY.image);
+    const jsonOut = readArg(args, "--json-out", null);
+    const diagnosis = await probeDoctor({ image });
+    if (jsonOut) {
+      await writeFile(jsonOut, JSON.stringify(diagnosis, null, 2), "utf8");
+    }
+    console.log(`Scout probe doctor: ${diagnosis.status}`);
+    for (const check of diagnosis.checks) {
+      console.log(`- ${check.name}: ${check.status} (${check.reason})`);
+    }
+    if (jsonOut) console.log(`Scout probe doctor JSON written to ${jsonOut}`);
+    return 0;
+  }
+
+  const reportPath = readArg(args, "--report", null);
+  const candidateId = readArg(args, "--candidate-id", null);
+  const approvalId = readArg(args, "--approval-id", null);
+  const out = readArg(args, "--out", "scout_probe_report.md");
+  const jsonOut = readArg(args, "--json-out", "scout_probe_report.json");
+  const network = readArg(args, "--network", "none");
+  const commandSet = readArg(args, "--command-set", "readonly");
+  const maxDurationSeconds = readLimit(readArg(args, "--max-duration-seconds", "60"));
+
+  if (!reportPath) {
+    throw new Error("probe requires --report <report.json>.");
+  }
+  if (!candidateId) {
+    throw new Error("probe requires --candidate-id <candidate_id>.");
+  }
+  if (!approvalId) {
+    throw new Error("probe requires --approval-id <approval_id>.");
+  }
+
+  const report = await loadReport(reportPath);
+  const probed = await runProbe({
+    report,
+    candidateId,
+    approvalId,
+    network,
+    commandSet,
+    maxDurationSeconds,
+    runner: new DockerSandboxRunner(),
+    outputDir: join(".scout", "probe", candidateId),
+  });
+  validateReportModel(probed);
+  await writeReportOutputs(probed, out, jsonOut);
+  console.log(`Scout probe report written to ${out}`);
+  if (jsonOut) console.log(`Scout probe machine report written to ${jsonOut}`);
+  return 0;
+}
+
 async function runSafe(args) {
   const limit = Number(readArg(args, "--limit", "50"));
   const out = readArg(args, "--out", "scout_report.md");
@@ -144,28 +203,57 @@ async function inspect(args) {
   const jsonOut = readArg(args, "--json-out", null);
   const reportPath = readArg(args, "--report", null);
   const manifestPath = readArg(args, "--manifest", null);
+  const fetchArchives = readFlag(args, "--fetch-archives");
   const auditLog = new AuditLog();
 
   let report;
-  if (!reportPath || !manifestPath) {
-    throw new Error("inspect requires --report <scout_report.json> and --manifest <manifest.json>.");
+  if (!reportPath || (!manifestPath && !fetchArchives)) {
+    throw new Error("inspect requires --report <scout_report.json> and either --manifest <manifest.json> or --fetch-archives.");
   } else {
     const baseReport = await loadReport(reportPath);
-    const manifestModel = await loadJson(manifestPath);
-    const inspectedCandidates = baseReport.candidates.map((candidate) =>
-      inspectCandidateStaticManifest({
-        policy,
-        candidate,
-        manifest: selectManifestForCandidate(manifestModel, candidate.candidate_id),
-      }),
-    );
+    const manifestModel = manifestPath ? await loadJson(manifestPath) : null;
+    const inspectedCandidates = [];
+    for (const candidate of baseReport.candidates) {
+      if (fetchArchives) {
+        inspectedCandidates.push(await inspectCandidateStaticArchive({ policy, candidate }));
+      } else {
+        inspectedCandidates.push(
+          inspectCandidateStaticManifest({
+            policy,
+            candidate,
+            manifest: selectManifestForCandidate(manifestModel, candidate.candidate_id),
+          }),
+        );
+      }
+    }
     const staticEvidence = inspectedCandidates.flatMap(evidenceFromStaticInspection);
-    const decisions = triageCandidates(inspectedCandidates);
+    const decisions = triageCandidates(inspectedCandidates, {
+      profile: {
+        profile_id: baseReport.triage_config?.profile_id,
+        threshold_overrides: baseReport.triage_config?.threshold_overrides ?? {},
+      },
+    });
+    if (fetchArchives) {
+      auditLog.record({
+        operation: "static_source_fetch",
+        mode: policy.mode,
+        decision: "allowed",
+        reason: `Static archive fetch completed for ${inspectedCandidates.length} candidates.`,
+      });
+      auditLog.record({
+        operation: "archive_download",
+        mode: policy.mode,
+        decision: "allowed",
+        reason: `Static archive download completed for ${inspectedCandidates.length} candidates.`,
+      });
+    }
     auditLog.record({
       operation: "static_file_read",
       mode: policy.mode,
       decision: "allowed",
-      reason: `Static manifest inspection completed for ${inspectedCandidates.length} candidates.`,
+      reason: fetchArchives
+        ? `Static archive inspection completed for ${inspectedCandidates.length} candidates.`
+        : `Static manifest inspection completed for ${inspectedCandidates.length} candidates.`,
     });
     report = createReportModel({
       run_status: baseReport.run_status,
@@ -176,6 +264,7 @@ async function inspect(args) {
       audit_events: [...baseReport.audit_events, ...auditLog.all()],
       monitor_events: baseReport.monitor_events,
       command_attempts: baseReport.command_attempts,
+      triage_config: baseReport.triage_config,
     });
   }
   await writeReportOutputs(report, out, jsonOut);
@@ -192,6 +281,8 @@ async function profile(args) {
     const labels = splitArg(readArg(args, "--labels", "good first issue,help wanted,documentation"));
     const excludeOrgs = splitArg(readArg(args, "--exclude-orgs", ""));
     const excludeRepos = splitArg(readArg(args, "--exclude-repos", ""));
+    const trustedSeedLists = splitArg(readArg(args, "--trusted-seed-lists", ""));
+    const thresholdOverrides = readJsonArg(args, "--threshold-overrides", {});
     const maxCandidates = readLimit(readArg(args, "--max-candidates", "50"));
     const profileModel = createSearchProfile({
       name,
@@ -199,6 +290,8 @@ async function profile(args) {
       labels,
       exclude_orgs: excludeOrgs,
       exclude_repos: excludeRepos,
+      trusted_seed_lists: trustedSeedLists,
+      threshold_overrides: thresholdOverrides,
       max_candidates: maxCandidates,
     });
     const saved = await saveSearchProfile(profileModel);
@@ -211,7 +304,7 @@ async function profile(args) {
     const jsonOut = readArg(args, "--json-out", null);
     const profileModel = await loadProfileOrDefault(name);
     const policy = defaultPolicy("metadata_only");
-    const report = await buildReport({ policy, limit: profileModel.max_candidates, queries: queriesFromProfile(profileModel), profile: profileModel });
+    const report = await buildProfileReport({ policy, profile: profileModel });
     await writeReportOutputs(report, out, jsonOut);
     console.log(`Scout profile report written to ${out}`);
     if (jsonOut) console.log(`Scout machine report written to ${jsonOut}`);
@@ -227,7 +320,7 @@ async function monitor(args) {
   const profileModel = await loadProfileOrDefault(profileName);
   const policy = defaultPolicy("metadata_only");
   const previous = await loadMonitorSnapshot(profileName);
-  const current = await buildReport({ policy, limit: profileModel.max_candidates, queries: queriesFromProfile(profileModel), profile: profileModel });
+  const current = await buildProfileReport({ policy, profile: profileModel });
   const monitorEvents = diffReports(previous?.decisions ?? [], current.decisions, profileModel.profile_id);
   const report = createReportModel({
     run_status: current.run_status,
@@ -238,6 +331,7 @@ async function monitor(args) {
     audit_events: current.audit_events,
     monitor_events: monitorEvents,
     command_attempts: current.command_attempts,
+    triage_config: current.triage_config,
   });
   await saveMonitorSnapshot(profileName, report);
   await writeReportOutputs(report, out, jsonOut);
@@ -255,7 +349,7 @@ async function workflow(args) {
   const outDir = readArg(args, "--out-dir", "scout_session");
   const profileModel = await loadProfileOrDefault(profileName);
   const policy = defaultPolicy("metadata_only");
-  const report = await buildReport({ policy, limit: profileModel.max_candidates, queries: queriesFromProfile(profileModel), profile: profileModel });
+  const report = await buildProfileReport({ policy, profile: profileModel });
   const shortlist = exportShortlist(report, { limit: 10 });
   const summary = renderCodexSummary(report);
   const nextActions = createNextActions(report);
@@ -306,7 +400,8 @@ async function buildReport({ policy, limit, queries, profile = null }) {
     });
     candidates = [];
   }
-  const decisions = triageCandidates(candidates);
+  appendCandidateMetadataEvidence(candidates, evidence);
+  const decisions = triageCandidates(candidates, { profile });
   const runStatus = determineRunStatus({ candidates, collectionErrors, queryCount: activeQueries.length || 1 });
   return createReportModel({
     run_status: runStatus,
@@ -315,7 +410,33 @@ async function buildReport({ policy, limit, queries, profile = null }) {
     decisions,
     evidence,
     audit_events: auditLog.all(),
+    profile,
   });
+}
+
+async function buildProfileReport({ policy, profile }) {
+  const trustedSeedLists = await loadTrustedSeedLists(profile.trusted_seed_lists ?? []);
+  return buildReport({
+    policy,
+    limit: profile.max_candidates,
+    queries: queriesFromProfile(profile, { trustedSeedLists }),
+    profile,
+  });
+}
+
+function appendCandidateMetadataEvidence(candidates, evidence) {
+  for (const candidate of candidates) {
+    evidence.push({
+      evidence_id: `evidence-metadata-${candidate.candidate_id}`,
+      candidate_id: candidate.candidate_id,
+      source_type: "GITHUB_API",
+      source_ref: candidate.issue_url,
+      observed_at: new Date().toISOString(),
+      trust_level: candidate.collection_status === "OBSERVED" ? "OBSERVED" : "UNKNOWN",
+      claim: `GitHub metadata collected for ${candidate.repo_owner}/${candidate.repo_name}#${candidate.issue_number} with collection_status=${candidate.collection_status}.`,
+      supports: "candidate metadata and triage input",
+    });
+  }
 }
 
 async function writeReportOutputs(report, out, jsonOut = null) {
@@ -335,6 +456,20 @@ function readArg(args, name, fallback) {
   return args[index + 1] ?? fallback;
 }
 
+function readFlag(args, name) {
+  return args.includes(name);
+}
+
+function readJsonArg(args, name, fallback) {
+  const raw = readArg(args, name, null);
+  if (raw === null) return fallback;
+  try {
+    return JSON.parse(raw);
+  } catch (error) {
+    throw new Error(`${name} must be valid JSON: ${error.message}`);
+  }
+}
+
 async function loadReport(reportPath) {
   const report = await loadJson(reportPath);
   return validateReportModel(normalizeReportModel(report));
@@ -348,6 +483,9 @@ function normalizeReportModel(report) {
     ...report,
     run_status: report.run_status ?? "complete",
     collection_errors: Array.isArray(report.collection_errors) ? report.collection_errors : [],
+    sandbox_runs: Array.isArray(report.sandbox_runs) ? report.sandbox_runs : [],
+    probe_config: report.probe_config ?? null,
+    probe_status: report.probe_status ?? "not_requested",
   };
 }
 
@@ -460,22 +598,27 @@ function createNextActions(report) {
 }
 
 function printHelp() {
-  console.log(`Scout Release 1
+  console.log(`Scout Release 2
 
 Codex-facing backend commands:
   scout run --safe --limit 50 --out scout_report.md
   scout discover --mode metadata_only --limit 50 --out scout_report.md --json-out scout_report.json
   scout inspect --report scout_report.json --manifest manifest.json --out scout_static_report.md --json-out scout_static_report.json
+  scout inspect --report scout_report.json --fetch-archives --out scout_static_report.md --json-out scout_static_report.json
   scout validate-report --report scout_report.json
   scout explain --candidate-id SCOUT-0001 --report scout_report.json
   scout export-shortlist --report scout_report.json --limit 25 --out scout_shortlist.md
-  scout profile create beginner-python-ts --languages Python,TypeScript
+  scout profile create beginner-python-ts --languages Python,TypeScript --trusted-seed-lists starter-pack --threshold-overrides '{"green_min_score":40}'
   scout profile run beginner-python-ts --out scout_report.md
   scout monitor --profile beginner-python-ts --out scout_watch_report.md
   scout workflow run --profile beginner-python-ts --out-dir scout_session
+  scout probe doctor --json-out scout_probe_doctor.json
+  scout probe --report scout_static_report.json --candidate-id SCOUT-0001 --approval-id APPROVAL-123 --network none --command-set readonly --out scout_probe_report.md --json-out scout_probe_report.json
   scout test-policy
 
-Release 1 denies clone, installs, repo scripts, Docker, dynamic probes, and GitHub writes.`);
+Top-level --help is available; subcommand-specific --help is not implemented.
+Release 2 probe is approval-bound, Docker-backed, no-network, readonly, one candidate at a time, and uses local Docker images only.
+Scout still denies clone, installs, repo scripts, GitHub writes, issue claiming, forks, branches, PRs, and issue-to-patch workflows.`);
 }
 
 main(process.argv.slice(2)).then(
