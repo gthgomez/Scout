@@ -7,8 +7,12 @@ import {
   validateCandidateIssue,
   validateEvidenceItem,
   validateMonitorEvent,
+  validateProbePlan,
   validateReportModel,
+  validateSandboxPolicy,
+  validateSandboxRun,
   validateSearchProfile,
+  validateSetupIntelligence,
   validateTriageDecision,
 } from "../validators.js";
 
@@ -105,6 +109,55 @@ describe("validators", () => {
     assert.equal(value.max_candidates, 30);
   });
 
+  it("rejects unsafe trusted seed-list ids in search profiles", () => {
+    assert.throws(
+      () =>
+        validateSearchProfile({
+          ...profiles.searchProfile,
+          trusted_seed_lists: ["https://example.test/starter-pack"],
+        }),
+      /seed-list id/,
+    );
+  });
+
+  it("loads legacy search profiles without threshold_overrides", () => {
+    const value = validateSearchProfile(profiles.searchProfile);
+
+    assert.equal(Object.hasOwn(value, "threshold_overrides"), false);
+  });
+
+  it("validates search profile threshold overrides", () => {
+    const profile = {
+      ...profiles.searchProfile,
+      threshold_overrides: {
+        green_min_score: 45,
+        max_issue_age_days: 730,
+      },
+    };
+
+    assert.equal(validateSearchProfile(profile).threshold_overrides.green_min_score, 45);
+    assert.deepEqual(validateSearchProfile({ ...profiles.searchProfile, threshold_overrides: {} }).threshold_overrides, {});
+  });
+
+  it("rejects invalid search profile threshold overrides", () => {
+    assert.throws(
+      () => validateSearchProfile({ ...profiles.searchProfile, threshold_overrides: { surprise: 1 } }),
+      /not a supported threshold/,
+    );
+    assert.throws(
+      () => validateSearchProfile({ ...profiles.searchProfile, threshold_overrides: { green_min_score: Infinity } }),
+      /finite number/,
+    );
+    assert.throws(
+      () => validateSearchProfile({ ...profiles.searchProfile, threshold_overrides: { max_issue_age_days: -1 } }),
+      /non-negative/,
+    );
+    assert.throws(
+      () => validateSearchProfile({ ...profiles.searchProfile, threshold_overrides: { recent_repo_activity_days: 1.5 } }),
+      /integer/,
+    );
+  });
+
   it("rejects search profiles with unsupported modes", () => {
     assert.throws(() => validateSearchProfile(profiles.invalidModeProfile));
   });
@@ -113,7 +166,189 @@ describe("validators", () => {
     assert.equal(typeof validateReportModel(reports.validReport), "object");
   });
 
+  it("validates Release 2 sandbox policy, probe plan, sandbox run, and argv command attempts", () => {
+    const sandboxPolicy = validateSandboxPolicy({
+      image: "node:20-alpine",
+      network: "none",
+      timeout_seconds: 60,
+      cpu_count: 1,
+      memory_mb: 512,
+      pids_limit: 128,
+      disk_mb: 256,
+      allow_host_home: false,
+      allow_ssh_agent: false,
+      allow_credential_helper: false,
+      allow_docker_socket: false,
+      inherit_host_env: false,
+      mounts: [],
+    });
+
+    assert.equal(validateProbePlan({
+      plan_id: "plan-1",
+      candidate_id: "SCOUT-test",
+      approval_id: "approval-1",
+      command_set: "readonly",
+      network_policy: "none",
+      sandbox_policy: sandboxPolicy,
+      source_refs: [{ type: "github_archive", ref: "https://api.github.com/repos/acme/demo/zipball/HEAD" }],
+      commands: [["node", "--version"]],
+      denied_commands: [
+        {
+          command: ["npm", "install"],
+          reason: "Package installs are blocked.",
+          source_ref: "README.md",
+          source_range: "L12",
+          category: "package_install",
+        },
+      ],
+      next_evidence_action: {
+        action: "readonly_probe",
+        reason: "Static setup evidence is present.",
+      },
+      created_at: "2026-06-04T00:00:00.000Z",
+    }).command_set, "readonly");
+
+    assert.equal(validateSandboxRun({
+      sandbox_id: "sandbox-1",
+      image: "node:20-alpine",
+      image_ref: "node:20-alpine",
+      image_digest: null,
+      created_at: "2026-06-04T00:00:00.000Z",
+      destroyed_at: "2026-06-04T00:01:00.000Z",
+      cleanup_status: "removed",
+      lifecycle_status: "destroyed",
+      network_policy: "none",
+      resource_limits: {
+        timeout_seconds: 60,
+        cpu_count: 1,
+        memory_mb: 512,
+        pids_limit: 128,
+        disk_mb: 256,
+      },
+    }).cleanup_status, "removed");
+
+    const report = validateReportModel({
+      ...reports.validReport,
+      command_attempts: [
+        {
+          candidate_id: "SCOUT-alpha-green-1",
+          command_id: "cmd-node-version",
+          command: ["node", "--version"],
+          status: "passed",
+          reason: "Readonly command completed.",
+          observed_at: "2026-06-04T00:00:00.000Z",
+          approval_id: "approval-1",
+          sandbox_id: "sandbox-1",
+          started_at: "2026-06-04T00:00:00.000Z",
+          ended_at: "2026-06-04T00:00:01.000Z",
+          duration_ms: 1000,
+          exit_code: 0,
+          stdout_artifact: ".scout/probe/cmd-node-version.stdout.txt",
+          stderr_artifact: ".scout/probe/cmd-node-version.stderr.txt",
+          result: "passed",
+        },
+      ],
+      sandbox_runs: [],
+      probe_status: "complete",
+    });
+
+    assert.equal(report.command_attempts[0].command[0], "node");
+  });
+
+  it("rejects malformed dynamic probe evidence", () => {
+    assert.throws(
+      () =>
+        validateSandboxPolicy({
+          image: "node:20-alpine",
+          network: "none",
+          timeout_seconds: 0,
+          cpu_count: 1,
+          memory_mb: 512,
+          pids_limit: 128,
+          disk_mb: 256,
+          allow_host_home: false,
+          allow_ssh_agent: false,
+          allow_credential_helper: false,
+          allow_docker_socket: false,
+          inherit_host_env: false,
+          mounts: [],
+        }),
+      /at least 1/,
+    );
+    assert.throws(
+      () =>
+        validateReportModel({
+          ...reports.validReport,
+          command_attempts: [
+            {
+              candidate_id: "SCOUT-alpha-green-1",
+              command: ["node", "--version"],
+              status: "passed",
+              reason: "Spoofed pass.",
+              observed_at: "2026-06-04T00:00:00.000Z",
+              exit_code: 1,
+            },
+          ],
+        }),
+      /exit_code 0/,
+    );
+  });
+
+  it("validates setup intelligence schema", () => {
+    const intelligence = validateSetupIntelligence({
+      schema_version: 1,
+      ecosystems: ["node"],
+      package_managers: ["npm"],
+      workspace: {
+        kind: "single_package",
+        manifest_paths: ["package.json"],
+        test_paths: ["package.json:scripts.test"],
+      },
+      setup_claims: [
+        {
+          kind: "setup_docs",
+          source_ref: "README.md",
+          detail: "README includes setup docs.",
+          confidence: "observed",
+        },
+      ],
+      denied_commands: [
+        {
+          command: ["npm", "install"],
+          reason: "Package installs are blocked.",
+          source_ref: "README.md",
+          source_range: "L4",
+          category: "package_install",
+        },
+      ],
+      risk_signals: [],
+      recommended_next_evidence_action: {
+        action: "readonly_probe",
+        reason: "Static setup evidence is present.",
+      },
+    });
+
+    assert.equal(intelligence.workspace.kind, "single_package");
+    assert.throws(
+      () =>
+        validateSetupIntelligence({
+          ...intelligence,
+          recommended_next_evidence_action: { action: "install_dependencies", reason: "bad" },
+        }),
+      /recommended_next_evidence_action.action/,
+    );
+  });
+
   it("flags false setup claims in report models", () => {
     assert.throws(() => validateReportModel(reports.falseSetupClaimReport), /False setup pass claim/);
+  });
+
+  it("requires recommendation decisions to have candidate evidence", () => {
+    const report = {
+      ...reports.validReport,
+      evidence: [],
+    };
+
+    assert.throws(() => validateReportModel(report), /lacks evidence records/);
   });
 });

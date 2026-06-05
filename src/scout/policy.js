@@ -17,6 +17,15 @@ const staticAllowed = [
   "static_file_read",
 ];
 
+const dynamicAllowed = [
+  ...staticAllowed,
+  "sandbox_create",
+  "sandbox_source_stage",
+  "sandbox_command_run",
+  "sandbox_artifact_read",
+  "sandbox_destroy",
+];
+
 const alwaysDenied = [
   "git_clone",
   "recursive_submodule_fetch",
@@ -33,6 +42,14 @@ const alwaysDenied = [
   "github_write_action",
 ];
 
+const approvalBoundSandboxOperations = Object.freeze([
+  "sandbox_create",
+  "sandbox_source_stage",
+  "sandbox_command_run",
+  "sandbox_artifact_read",
+  "sandbox_destroy",
+]);
+
 export function defaultPolicy(mode = "metadata_only") {
   if (!MODES.includes(mode)) {
     throw new Error(`Unsupported Scout mode: ${mode}`);
@@ -40,11 +57,17 @@ export function defaultPolicy(mode = "metadata_only") {
 
   return {
     mode,
-    allowed_operations: mode === "static_inspection" ? staticAllowed : metadataAllowed,
+    allowed_operations:
+      mode === "dynamic_probe"
+        ? dynamicAllowed
+        : mode === "static_inspection"
+          ? staticAllowed
+          : metadataAllowed,
     denied_operations: alwaysDenied,
     requires_approval: [
       "static_source_fetch",
       "archive_download",
+      ...approvalBoundSandboxOperations,
       "package_registry_network",
       "full_network_egress",
       "github_write_action",
@@ -70,6 +93,13 @@ export function decideOperation(policy, operation, approvalId = null) {
   }
 
   if (policy.allowed_operations?.includes(operation)) {
+    if (approvalBoundSandboxOperations.includes(operation) && !approvalId) {
+      return {
+        decision: "denied",
+        reason: `${operation} requires a dynamic probe approval id and sandbox contract.`,
+        approval_id: approvalId,
+      };
+    }
     return {
       decision: "allowed",
       reason: `${operation} is allowed in ${policy.mode} mode.`,
@@ -111,4 +141,3 @@ export function createDenialMessage(operation, reason, nextSafeAction) {
     `Next safe action: ${nextSafeAction}`,
   ].join("\n");
 }
-

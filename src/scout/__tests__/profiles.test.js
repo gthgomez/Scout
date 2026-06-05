@@ -39,6 +39,70 @@ describe("search profiles", () => {
     assert.ok(queries.includes('is:issue state:open label:"documentation" no:assignee language:TypeScript') === false);
   });
 
+  it("builds include queries, seed-list queries, then broad generated queries", () => {
+    const profile = validateSearchProfile({
+      ...fixtures.searchProfile,
+      include_queries: ["is:issue state:open sort:updated-desc"],
+      labels: ["good first issue"],
+      languages: ["Python"],
+      trusted_seed_lists: ["starter-pack"],
+    });
+    const queries = queriesFromProfile(profile, {
+      trustedSeedLists: [
+        {
+          seed_list_id: "starter-pack",
+          name: "Starter Pack",
+          repos: [
+            {
+              repo: "pallets/flask",
+              labels: ["good first issue"],
+              languages: ["Python"],
+            },
+            {
+              repo: "nodejs/node",
+              labels: [],
+            },
+          ],
+        },
+      ],
+    });
+
+    assert.equal(queries[0], "is:issue state:open sort:updated-desc");
+    assert.deepEqual(queries[1], {
+      query: 'repo:pallets/flask is:issue state:open label:"good first issue" no:assignee language:Python',
+      kind: "trusted_seed_list",
+      seed_list_id: "starter-pack",
+      seed_list_name: "Starter Pack",
+      repo: "pallets/flask",
+    });
+    assert.equal(queries[2].query, "repo:nodejs/node is:issue state:open no:assignee");
+    assert.equal(queries[3], 'is:issue state:open label:"good first issue" no:assignee language:Python');
+  });
+
+  it("dedupes profile query text while preserving the first occurrence", () => {
+    const duplicatedSeedQuery = 'repo:pallets/flask is:issue state:open label:"good first issue" no:assignee language:Python';
+    const profile = validateSearchProfile({
+      ...fixtures.searchProfile,
+      include_queries: [duplicatedSeedQuery],
+      labels: ["good first issue"],
+      languages: ["Python"],
+      trusted_seed_lists: ["starter-pack"],
+    });
+
+    const queries = queriesFromProfile(profile, {
+      trustedSeedLists: [
+        {
+          seed_list_id: "starter-pack",
+          name: "Starter Pack",
+          repos: [{ repo: "pallets/flask", labels: ["good first issue"], languages: ["Python"] }],
+        },
+      ],
+    });
+
+    assert.equal(queries.filter((query) => (typeof query === "string" ? query : query.query) === duplicatedSeedQuery).length, 1);
+    assert.equal(queries[0], duplicatedSeedQuery);
+  });
+
   it("allows harmless operations and blocks forbidden ones", () => {
     const profile = validateSearchProfile(fixtures.searchProfile);
     assert.equal(profileAllowsOperation(profile, "github_issue_metadata_read"), true);

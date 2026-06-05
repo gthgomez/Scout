@@ -62,6 +62,24 @@ describe("hard drop logic", () => {
     assert.equal(decision.human_next_action, "Drop candidate.");
     assert.equal(decision.gap_codes[0], "SECURITY_GAP");
   });
+
+  it("drops trusted seed-list candidates when normal hard-drop conditions apply", () => {
+    const seedObservation = { kind: "trusted_seed_list", value: "starter-pack", repo: "alpha/project" };
+    const candidates = [
+      fixtures.archivedCandidate,
+      fixtures.privateCredentialCandidate,
+      fixtures.claimedCandidate,
+    ].map((candidate) => ({
+      ...candidate,
+      source_observations: [seedObservation, ...(candidate.source_observations ?? [])],
+    }));
+
+    for (const candidate of candidates) {
+      const decision = triageCandidate(candidate, { now: NOW });
+      assert.equal(decision.verdict, "RED");
+      assert.equal(decision.human_next_action, "Drop candidate.");
+    }
+  });
 });
 
 describe("triage ranking", () => {
@@ -89,5 +107,70 @@ describe("triage ranking", () => {
     assert.equal(typeof decision.portfolio_score, "number");
     assert.ok(Array.isArray(decision.portfolio_reasons));
     assert.ok(portfolioValueScore(fixtures.greenCandidate).portfolio_reasons.length > 0);
+  });
+
+  it("does not mark observed candidates GREEN without setup guidance", () => {
+    const decision = triageCandidate(
+      {
+        ...fixtures.greenCandidate,
+        candidate_id: "SCOUT-alpha-no-setup-1",
+        source_observations: [],
+      },
+      { now: NOW },
+    );
+
+    assert.equal(decision.verdict, "YELLOW");
+    assert.equal(decision.setup_status, "unknown");
+    assert.ok(decision.gap_codes.includes("SOURCE_GAP"));
+  });
+
+  it("uses green_min_score overrides when deciding GREEN eligibility", () => {
+    const decision = triageCandidate(fixtures.greenCandidate, {
+      now: NOW,
+      threshold_overrides: { green_min_score: 101 },
+    });
+
+    assert.equal(decision.score, 100);
+    assert.equal(decision.verdict, "YELLOW");
+    assert.equal(decision.threshold_policy.effective_thresholds.green_min_score, 101);
+  });
+
+  it("lets stale threshold overrides remove stale penalties only when setup and score gates pass", () => {
+    const permissive = triageCandidate(fixtures.staleCandidate, {
+      now: NOW,
+      threshold_overrides: { max_issue_age_days: 700 },
+    });
+    const missingSetup = triageCandidate(
+      {
+        ...fixtures.staleCandidate,
+        source_observations: [],
+      },
+      {
+        now: NOW,
+        threshold_overrides: { max_issue_age_days: 700 },
+      },
+    );
+
+    assert.equal(permissive.verdict, "GREEN");
+    assert.ok(!permissive.score_reasons.includes("-20 stale issue"));
+    assert.equal(missingSetup.verdict, "YELLOW");
+    assert.equal(missingSetup.setup_status, "unknown");
+  });
+
+  it("keeps hard-drop candidates RED regardless of permissive threshold overrides", () => {
+    const decision = triageCandidate(fixtures.privateCredentialCandidate, {
+      now: NOW,
+      threshold_overrides: {
+        green_min_score: 0,
+        max_issue_age_days: 9999,
+        recent_repo_activity_days: 9999,
+        recent_maintainer_activity_days: 9999,
+        min_issue_title_length: 0,
+        max_estimated_files_touched: 9999,
+      },
+    });
+
+    assert.equal(decision.verdict, "RED");
+    assert.equal(decision.drop_reason, "Work appears to require private credentials or paid services.");
   });
 });

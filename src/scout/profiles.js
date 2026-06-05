@@ -1,5 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { normalizeSeedRepo } from "./seed-lists.js";
 import { validateSearchProfile } from "./validators.js";
 
 export function createSearchProfile({
@@ -32,7 +33,7 @@ export function createSearchProfile({
   });
 }
 
-export function queriesFromProfile(profile) {
+export function queriesFromProfile(profile, options = {}) {
   validateSearchProfile(profile);
   const queries = [];
   for (const label of profile.labels) {
@@ -44,7 +45,66 @@ export function queriesFromProfile(profile) {
       }
     }
   }
-  return [...profile.include_queries, ...queries];
+  return dedupeQueries([...profile.include_queries, ...seedQueriesFromProfile(profile, options.trustedSeedLists ?? []), ...queries]);
+}
+
+function seedQueriesFromProfile(profile, trustedSeedLists) {
+  const requestedSeedLists = new Set(profile.trusted_seed_lists ?? []);
+  const seedQueries = [];
+  for (const seedList of trustedSeedLists) {
+    if (requestedSeedLists.size > 0 && !requestedSeedLists.has(seedList.seed_list_id)) continue;
+    for (const repoEntry of seedList.repos ?? []) {
+      const seedRepo = normalizeSeedRepo(repoEntry);
+      for (const query of queriesForSeedRepo(seedRepo, profile)) {
+        seedQueries.push({
+          query,
+          kind: "trusted_seed_list",
+          seed_list_id: seedList.seed_list_id,
+          seed_list_name: seedList.name,
+          repo: seedRepo.repo,
+        });
+      }
+    }
+  }
+  return seedQueries;
+}
+
+function queriesForSeedRepo(seedRepo, profile) {
+  const labels = seedRepo.labels ?? profile.labels;
+  const languages = seedRepo.languages ?? profile.languages;
+  if (labels.length === 0) {
+    return [`repo:${seedRepo.repo} is:issue state:open no:assignee`];
+  }
+
+  const queries = [];
+  for (const label of labels) {
+    if (languages.length === 0) {
+      queries.push(`repo:${seedRepo.repo} is:issue state:open label:"${escapeQueryValue(label)}" no:assignee`);
+      continue;
+    }
+    for (const language of languages) {
+      const base = `repo:${seedRepo.repo} is:issue state:open label:"${escapeQueryValue(label)}" no:assignee`;
+      queries.push(language === "Docs" ? base : `${base} language:${language}`);
+    }
+  }
+  return queries;
+}
+
+function dedupeQueries(queries) {
+  const seen = new Set();
+  const deduped = [];
+  for (const query of queries) {
+    const queryText = typeof query === "string" ? query : query.query;
+    if (!seen.has(queryText)) {
+      seen.add(queryText);
+      deduped.push(query);
+    }
+  }
+  return deduped;
+}
+
+function escapeQueryValue(value) {
+  return String(value).replaceAll('"', '\\"');
 }
 
 export function profileAllowsOperation(profile, operation) {

@@ -1,5 +1,50 @@
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
+export const DEFAULT_THRESHOLDS = Object.freeze({
+  green_min_score: 30,
+  max_issue_age_days: 365,
+  recent_repo_activity_days: 90,
+  recent_maintainer_activity_days: 180,
+  min_issue_title_length: 12,
+  max_estimated_files_touched: 5,
+});
+
+export const THRESHOLD_KEYS = Object.freeze(Object.keys(DEFAULT_THRESHOLDS));
+
+export function resolveThresholds(threshold_overrides = {}) {
+  if (!threshold_overrides || typeof threshold_overrides !== "object" || Array.isArray(threshold_overrides)) {
+    throw new Error("threshold_overrides must be an object");
+  }
+
+  const normalized = {};
+  for (const [key, value] of Object.entries(threshold_overrides)) {
+    if (!THRESHOLD_KEYS.includes(key)) {
+      throw new Error(`threshold_overrides.${key} is not a supported threshold`);
+    }
+    if (typeof value !== "number" || !Number.isFinite(value)) {
+      throw new Error(`threshold_overrides.${key} must be a finite number`);
+    }
+    if (value < 0) {
+      throw new Error(`threshold_overrides.${key} must be non-negative`);
+    }
+    if (!Number.isInteger(value)) {
+      throw new Error(`threshold_overrides.${key} must be an integer`);
+    }
+    normalized[key] = value;
+  }
+
+  return { ...DEFAULT_THRESHOLDS, ...normalized };
+}
+
+export function resolveTriageConfig(profile = {}) {
+  const threshold_overrides = profile?.threshold_overrides ?? {};
+  return {
+    profile_id: profile?.profile_id ?? "unprofiled",
+    threshold_overrides,
+    effective_thresholds: resolveThresholds(threshold_overrides),
+  };
+}
+
 function daysSince(dateLike, now = new Date()) {
   if (!dateLike) return Number.POSITIVE_INFINITY;
   const time = new Date(dateLike).getTime();
@@ -9,10 +54,11 @@ function daysSince(dateLike, now = new Date()) {
 
 export function scoreCandidate(candidate, options = {}) {
   const now = options.now ?? new Date();
+  const thresholds = resolveThresholds(options.threshold_overrides ?? options.profile?.threshold_overrides ?? {});
   let score = 0;
   const reasons = [];
 
-  if (candidate.issue_title?.length >= 12) {
+  if (candidate.issue_title?.length >= thresholds.min_issue_title_length) {
     score += 25;
     reasons.push("+25 issue clarity");
   }
@@ -20,11 +66,11 @@ export function scoreCandidate(candidate, options = {}) {
     score += 20;
     reasons.push("+20 setup docs quality");
   }
-  if (daysSince(candidate.latest_repo_activity_at ?? candidate.updated_at, now) <= 90) {
+  if (daysSince(candidate.latest_repo_activity_at ?? candidate.updated_at, now) <= thresholds.recent_repo_activity_days) {
     score += 15;
     reasons.push("+15 repo activity");
   }
-  if (daysSince(candidate.latest_maintainer_activity_at, now) <= 180) {
+  if (daysSince(candidate.latest_maintainer_activity_at, now) <= thresholds.recent_maintainer_activity_days) {
     score += 15;
     reasons.push("+15 maintainer responsiveness");
   }
@@ -36,11 +82,11 @@ export function scoreCandidate(candidate, options = {}) {
     score += 10;
     reasons.push("+10 stack fit");
   }
-  if (candidate.estimated_files_touched && candidate.estimated_files_touched <= 5) {
+  if (candidate.estimated_files_touched && candidate.estimated_files_touched <= thresholds.max_estimated_files_touched) {
     score += 5;
     reasons.push("+5 small file-touch estimate");
   }
-  if (daysSince(candidate.updated_at, now) > 365) {
+  if (daysSince(candidate.updated_at, now) > thresholds.max_issue_age_days) {
     score -= 20;
     reasons.push("-20 stale issue");
   }
@@ -107,8 +153,13 @@ export function portfolioValueScore(candidate) {
 }
 
 export function triageCandidate(candidate, options = {}) {
+  const profile = options.profile ?? {
+    profile_id: options.profile_id,
+    threshold_overrides: options.threshold_overrides ?? {},
+  };
+  const triageConfig = resolveTriageConfig(profile);
   const hardDrop = hardDropReason(candidate);
-  const score = scoreCandidate(candidate, options);
+  const score = scoreCandidate(candidate, { ...options, threshold_overrides: triageConfig.threshold_overrides });
   const portfolio = portfolioValueScore(candidate);
 
   if (hardDrop) {
@@ -126,12 +177,18 @@ export function triageCandidate(candidate, options = {}) {
       human_next_action: "Drop candidate.",
       score_reasons: score.reasons,
       portfolio_reasons: portfolio.portfolio_reasons,
+      threshold_policy: triageConfig,
     };
   }
 
-  const stale = daysSince(candidate.updated_at, options.now ?? new Date()) > 365;
+  const stale = daysSince(candidate.updated_at, options.now ?? new Date()) > triageConfig.effective_thresholds.max_issue_age_days;
   const partial = candidate.collection_status !== "OBSERVED";
-  const verdict = partial ? "GRAY" : stale || score.score < 30 ? "YELLOW" : "GREEN";
+  const setupDocumented = hasPositiveSetupDocs(candidate);
+  const verdict = partial
+    ? "GRAY"
+    : stale || !setupDocumented || score.score < triageConfig.effective_thresholds.green_min_score
+      ? "YELLOW"
+      : "GREEN";
   return {
     candidate_id: candidate.candidate_id,
     verdict,
@@ -139,15 +196,18 @@ export function triageCandidate(candidate, options = {}) {
     score: score.score,
     portfolio_score: portfolio.portfolio_score,
     drop_reason: null,
-    gap_codes: partial ? ["SOURCE_GAP"] : [],
-    risk_summary: partial ? "Insufficient evidence for confident recommendation." : "No hard drop detected.",
-    setup_status: hasPositiveSetupDocs(candidate)
-      ? "static_docs_ok"
-      : "unknown",
+    gap_codes: partial ? ["SOURCE_GAP"] : setupDocumented ? [] : ["SOURCE_GAP"],
+    risk_summary: partial
+      ? "Insufficient evidence for confident recommendation."
+      : setupDocumented
+        ? "No hard drop detected."
+        : "Setup guidance has not been confirmed.",
+    setup_status: setupDocumented ? "static_docs_ok" : "unknown",
     abandon_criteria: "Abandon if the issue is claimed, solved by a linked PR, or requires private credentials.",
     human_next_action: verdict === "GREEN" ? "Review manually before claiming." : "Review evidence gaps before pursuing.",
     score_reasons: score.reasons,
     portfolio_reasons: portfolio.portfolio_reasons,
+    threshold_policy: triageConfig,
   };
 }
 

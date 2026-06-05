@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
-import { explainCandidate, exportShortlist } from "../report.js";
+import { createReportModel, explainCandidate, exportShortlist, renderMarkdownReport } from "../report.js";
 
 const fixturesPath = join(dirname(fileURLToPath(import.meta.url)), "fixtures");
 const reportFixtures = JSON.parse(readFileSync(join(fixturesPath, "report-model.json"), "utf8"));
@@ -27,8 +27,8 @@ function removeFixture(dir) {
   rmSync(dir, { recursive: true, force: true });
 }
 
-function runCli(args) {
-  const result = spawnSync(process.execPath, [cliPath, ...args], { encoding: "utf8" });
+function runCli(args, options = {}) {
+  const result = spawnSync(process.execPath, [cliPath, ...args], { encoding: "utf8", cwd: options.cwd });
   if (result.error) {
     throw result.error;
   }
@@ -116,6 +116,28 @@ describe("report utilities", () => {
     assert.ok(output.includes("acme/tooling"));
     assert.ok(!output.includes("SCOUT-alpha-red-1"));
   });
+
+  it("renders evidence IDs in recommended issue rows", () => {
+    const output = renderMarkdownReport(reportFixtures.validReport);
+
+    assert.ok(output.includes("Evidence IDs"));
+    assert.match(output, /\|\s*ev-1\s*\|/);
+  });
+
+  it("adds triage_config with effective thresholds to report JSON models", () => {
+    const report = createReportModel({
+      ...reportFixtures.validReport,
+      profile: {
+        profile_id: "profile-open-contribution",
+        threshold_overrides: { green_min_score: 101 },
+      },
+    });
+
+    assert.equal(report.triage_config.profile_id, "profile-open-contribution");
+    assert.deepEqual(report.triage_config.threshold_overrides, { green_min_score: 101 });
+    assert.equal(report.triage_config.effective_thresholds.green_min_score, 101);
+    assert.equal(report.triage_config.effective_thresholds.max_issue_age_days, 365);
+  });
 });
 
 describe("report CLI commands", () => {
@@ -126,6 +148,20 @@ describe("report CLI commands", () => {
       assert.ok(output.includes("Report validation passed for"));
       assert.ok(output.includes("Candidates: 1"));
       assert.ok(output.includes("Decisions: 1"));
+    } finally {
+      removeFixture(dir);
+    }
+  });
+
+  it("accepts legacy saved reports without run metadata", () => {
+    const legacyReport = { ...reportFixtures.validReport };
+    delete legacyReport.run_status;
+    delete legacyReport.collection_errors;
+    const { dir, path } = createReportFixture(legacyReport);
+    try {
+      const output = runCli(["validate-report", "--report", path]);
+      assert.ok(output.includes("Report validation passed for"));
+      assert.ok(output.includes("Candidates: 1"));
     } finally {
       removeFixture(dir);
     }
@@ -158,6 +194,97 @@ describe("report CLI commands", () => {
     }
   });
 
+  it("denies probe before sandbox creation when approval id is missing", () => {
+    const { dir, path } = createReportFixture();
+    try {
+      assert.throws(() => {
+        runCli(["probe", "--report", path, "--candidate-id", "SCOUT-alpha-green-1"]);
+      }, /approval-id/);
+    } finally {
+      removeFixture(dir);
+    }
+  });
+
+  it("persists trusted seed lists and threshold overrides from profile create", () => {
+    const dir = mkdtempSync(join(tmpdir(), "scout-profile-create-"));
+    try {
+      const output = runCli(
+        [
+          "profile",
+          "create",
+          "seeded-python",
+          "--languages",
+          "Python",
+          "--labels",
+          "good first issue",
+          "--trusted-seed-lists",
+          "starter-pack,jonathan-python",
+          "--threshold-overrides",
+          "{\"green_min_score\":40}",
+          "--max-candidates",
+          "3",
+        ],
+        { cwd: dir },
+      );
+      const profile = JSON.parse(output);
+      const saved = JSON.parse(readFileSync(join(dir, ".scout", "profiles", "seeded-python.json"), "utf8"));
+
+      assert.deepEqual(profile.trusted_seed_lists, ["starter-pack", "jonathan-python"]);
+      assert.deepEqual(saved.threshold_overrides, { green_min_score: 40 });
+      assert.equal(saved.max_candidates, 3);
+    } finally {
+      removeFixture(dir);
+    }
+  });
+
+  it("loads trusted seed lists and emits triage_config during profile run", () => {
+    const dir = mkdtempSync(join(tmpdir(), "scout-profile-run-"));
+    const profileDir = join(dir, ".scout", "profiles");
+    const seedListDir = join(dir, ".scout", "seed-lists");
+    const reportPath = join(dir, "scout_report.json");
+    mkdirSync(profileDir, { recursive: true });
+    mkdirSync(seedListDir, { recursive: true });
+    writeFileSync(
+      join(profileDir, "seeded.json"),
+      JSON.stringify(
+        {
+          profile_id: "profile-seeded",
+          name: "seeded",
+          languages: [],
+          labels: [],
+          include_queries: [],
+          exclude_orgs: [],
+          exclude_repos: [],
+          trusted_seed_lists: ["starter-pack"],
+          max_candidates: 1,
+          mode: "metadata_only",
+          threshold_overrides: { green_min_score: 45 },
+          created_at: "2026-06-04T00:00:00.000Z",
+          updated_at: "2026-06-04T00:00:00.000Z",
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+    writeFileSync(
+      join(seedListDir, "starter-pack.json"),
+      JSON.stringify({ seed_list_id: "starter-pack", name: "Starter Pack", repos: [] }, null, 2),
+      "utf8",
+    );
+
+    try {
+      runCli(["profile", "run", "seeded", "--out", reportPath], { cwd: dir });
+      const report = JSON.parse(readFileSync(reportPath, "utf8"));
+
+      assert.equal(report.triage_config.profile_id, "profile-seeded");
+      assert.deepEqual(report.triage_config.threshold_overrides, { green_min_score: 45 });
+      assert.equal(report.triage_config.effective_thresholds.green_min_score, 45);
+    } finally {
+      removeFixture(dir);
+    }
+  });
+
   it("errors when validation report is not valid JSON", () => {
     const dir = mkdtempSync(join(tmpdir(), "scout-cli-"));
     const path = join(dir, "invalid_report.json");
@@ -167,6 +294,62 @@ describe("report CLI commands", () => {
       assert.throws(() => {
         runCli(["validate-report", "--report", path]);
     }, /Unable to parse JSON/);
+    } finally {
+      removeFixture(dir);
+    }
+  });
+
+  it("fails validation when candidates lack triage decisions", () => {
+    const { dir, path } = createReportFixture({ decisions: [] });
+    try {
+      assert.throws(() => {
+        runCli(["validate-report", "--report", path]);
+      }, /lack triage decisions/);
+    } finally {
+      removeFixture(dir);
+    }
+  });
+
+  it("writes Codex-facing workflow artifacts", () => {
+    const dir = mkdtempSync(join(tmpdir(), "scout-workflow-"));
+    const profileDir = join(dir, ".scout", "profiles");
+    const outDir = join(dir, "session");
+    mkdirSync(profileDir, { recursive: true });
+    writeFileSync(
+      join(profileDir, "empty.json"),
+      JSON.stringify(
+        {
+          profile_id: "profile-empty",
+          name: "empty",
+          languages: [],
+          labels: [],
+          include_queries: [],
+          exclude_orgs: [],
+          exclude_repos: [],
+          trusted_seed_lists: [],
+          max_candidates: 1,
+          mode: "metadata_only",
+          threshold_overrides: { green_min_score: 41 },
+          created_at: "2026-06-04T00:00:00.000Z",
+          updated_at: "2026-06-04T00:00:00.000Z",
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    try {
+      runCli(["workflow", "run", "--profile", "empty", "--out-dir", outDir], { cwd: dir });
+      const report = JSON.parse(readFileSync(join(outDir, "scout_report.json"), "utf8"));
+      const summary = readFileSync(join(outDir, "codex_summary.md"), "utf8");
+      const nextActions = JSON.parse(readFileSync(join(outDir, "next_actions.json"), "utf8"));
+
+      assert.equal(report.run_status, "complete");
+      assert.equal(report.triage_config.profile_id, "profile-empty");
+      assert.equal(report.triage_config.effective_thresholds.green_min_score, 41);
+      assert.ok(summary.includes("No clone, install, repo script"));
+      assert.deepEqual(nextActions, []);
     } finally {
       removeFixture(dir);
     }

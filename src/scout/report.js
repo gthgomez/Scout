@@ -1,25 +1,51 @@
 import { validateReportModel } from "./validators.js";
+import { resolveTriageConfig } from "./triage.js";
 
 const VERDICT_ORDER = Object.freeze({ GREEN: 0, YELLOW: 1, GRAY: 2, RED: 3 });
 
 export function createReportModel({
+  run_status = "complete",
+  collection_errors = [],
   candidates = [],
   evidence = [],
   decisions = [],
   audit_events = [],
   monitor_events = [],
   command_attempts = [],
+  sandbox_runs = [],
+  probe_config = null,
+  probe_status = "not_requested",
+  runtime_safety_status = undefined,
+  profile = undefined,
+  triage_config = undefined,
 }) {
   return validateReportModel({
     generated_at: new Date().toISOString(),
-    runtime_safety_status: "Release 1: no clone, no install, no repo scripts, no GitHub writes, no dynamic probes.",
+    run_status,
+    runtime_safety_status:
+      runtime_safety_status ?? "Release 1: no clone, no install, no repo scripts, no GitHub writes, no dynamic probes.",
+    triage_config: createTriageConfig(profile, triage_config),
+    collection_errors,
     candidates,
     evidence,
     decisions,
     audit_events,
     monitor_events,
     command_attempts,
+    sandbox_runs,
+    probe_config,
+    probe_status,
   });
+}
+
+function createTriageConfig(profile, triageConfig) {
+  if (triageConfig) {
+    return resolveTriageConfig({
+      profile_id: triageConfig.profile_id ?? profile?.profile_id,
+      threshold_overrides: triageConfig.threshold_overrides ?? profile?.threshold_overrides ?? {},
+    });
+  }
+  return resolveTriageConfig(profile);
 }
 
 export function renderMarkdownReport(report) {
@@ -34,6 +60,7 @@ export function renderMarkdownReport(report) {
     "## Executive Verdict",
     "",
     `Generated: ${report.generated_at}`,
+    `Run status: ${report.run_status}`,
     "",
     `Recommended candidates: ${recommended.length}`,
     `Unknown candidates: ${unknown.length}`,
@@ -45,9 +72,13 @@ export function renderMarkdownReport(report) {
     "",
     renderCommandAttempts(report.command_attempts),
     "",
+    "## Probe Results",
+    "",
+    renderProbeResults(report),
+    "",
     "## Recommended Issues",
     "",
-    renderRecommendedTable(recommended, report.candidates),
+    renderRecommendedTable(recommended, report.candidates, report.evidence),
     "",
     "## Dropped Candidates",
     "",
@@ -56,6 +87,10 @@ export function renderMarkdownReport(report) {
     "## Evidence Log",
     "",
     renderEvidence(report.evidence),
+    "",
+    "## Collection Errors",
+    "",
+    renderCollectionErrors(report.collection_errors),
     "",
     "## Monitor Events",
     "",
@@ -90,7 +125,9 @@ export function explainCandidate(report, candidateId) {
   }
 
   const candidateEvidence = report.evidence.filter((item) => item.candidate_id === candidateId);
+  const candidateCommands = report.command_attempts.filter((item) => item.candidate_id === candidateId);
   const claimEvidenceIds = candidateEvidence.map((item) => item.evidence_id).filter(Boolean);
+  const setupIntelligence = candidate.static_inspection?.setup_intelligence;
 
   const riskClaims = [
     {
@@ -146,6 +183,32 @@ export function explainCandidate(report, candidateId) {
     lines.push("## Evidence", ...candidateEvidence.map((item) => `- ${item.evidence_id} [${item.trust_level}]: ${item.claim}`));
   }
 
+  if (setupIntelligence) {
+    lines.push(
+      "",
+      "## Setup Intelligence",
+      `- Ecosystems: ${(setupIntelligence.ecosystems ?? []).join(", ") || "unknown"}`,
+      `- Package managers: ${(setupIntelligence.package_managers ?? []).join(", ") || "unknown"}`,
+      `- Workspace: ${setupIntelligence.workspace?.kind ?? "unknown"}`,
+      `- Next evidence action: ${setupIntelligence.recommended_next_evidence_action?.action ?? "unknown"} - ${setupIntelligence.recommended_next_evidence_action?.reason ?? ""}`,
+    );
+    const denied = setupIntelligence.denied_commands ?? [];
+    if (denied.length > 0) {
+      lines.push("Denied setup commands:", ...denied.map((item) => `- ${formatCommand(item.command)}: ${formatDeniedContext(item)}${item.reason}`));
+    }
+  }
+
+  if (candidateCommands.length > 0) {
+    lines.push(
+      "",
+      "## Dynamic Probe Evidence",
+      ...candidateCommands.map(
+        (item) =>
+          `- ${formatCommand(item.command)} [${item.status}] ${item.reason} (approval: ${item.approval_id ?? "n/a"}, sandbox: ${item.sandbox_id ?? "n/a"})`,
+      ),
+    );
+  }
+
   return lines.join("\n");
 }
 
@@ -191,19 +254,31 @@ function shortlistDecisions(decisions) {
   });
 }
 
-function renderRecommendedTable(decisions, candidates) {
+function renderRecommendedTable(decisions, candidates, evidence) {
   const byId = candidateById(candidates);
+  const evidenceByCandidateId = evidenceIdsByCandidate(evidence);
   const rows = [
-    "| Rank | Verdict | Repo | Stack | Issue | Link | Score | Portfolio | Risk | Setup Status | Human Next Action |",
-    "| ---: | --- | --- | --- | --- | --- | ---: | ---: | --- | --- | --- |",
+    "| Rank | Verdict | Repo | Stack | Issue | Link | Score | Portfolio | Risk | Setup Status | Evidence IDs | Human Next Action |",
+    "| ---: | --- | --- | --- | --- | --- | ---: | ---: | --- | --- | --- | --- |",
   ];
   for (const decision of decisions) {
     const candidate = byId.get(decision.candidate_id);
+    const evidenceIds = evidenceByCandidateId.get(decision.candidate_id) ?? [];
     rows.push(
-      `| ${decision.rank ?? ""} | ${decision.verdict} | ${candidate?.repo_owner}/${candidate?.repo_name} | ${candidate?.primary_language ?? "unknown"} | ${escapeCell(candidate?.issue_title ?? decision.candidate_id)} | ${candidate?.issue_url ?? ""} | ${decision.score ?? ""} | ${decision.portfolio_score ?? ""} | ${escapeCell(decision.risk_summary)} | ${decision.setup_status} | ${escapeCell(decision.human_next_action)} |`,
+      `| ${decision.rank ?? ""} | ${decision.verdict} | ${candidate?.repo_owner}/${candidate?.repo_name} | ${candidate?.primary_language ?? "unknown"} | ${escapeCell(candidate?.issue_title ?? decision.candidate_id)} | ${candidate?.issue_url ?? ""} | ${decision.score ?? ""} | ${decision.portfolio_score ?? ""} | ${escapeCell(decision.risk_summary)} | ${decision.setup_status} | ${escapeCell(evidenceIds.join(", "))} | ${escapeCell(decision.human_next_action)} |`,
     );
   }
   return rows.join("\n");
+}
+
+function evidenceIdsByCandidate(evidence) {
+  const byCandidate = new Map();
+  for (const item of evidence) {
+    const existing = byCandidate.get(item.candidate_id) ?? [];
+    existing.push(item.evidence_id);
+    byCandidate.set(item.candidate_id, existing);
+  }
+  return byCandidate;
 }
 
 function renderDroppedTable(decisions, candidates) {
@@ -226,14 +301,53 @@ function renderEvidence(evidence) {
   return evidence.map((item) => `- ${item.evidence_id}: [${item.trust_level}] ${item.claim}`).join("\n");
 }
 
+function renderCollectionErrors(errors) {
+  if (errors.length === 0) return "- None.";
+  return errors.map((item) => `- ${item.operation}: ${item.message}`).join("\n");
+}
+
 function renderCommandAttempts(commandAttempts) {
   if (commandAttempts.length === 0) {
-    return "Commands attempted: none. Dynamic execution is not available in Release 1.";
+    return "Commands attempted: none.";
   }
   return [
     "Command attempts:",
-    ...commandAttempts.map((item) => `- ${item.candidate_id}: ${item.command} [${item.status}] ${item.reason}`),
+    ...commandAttempts.map((item) => `- ${item.candidate_id}: ${formatCommand(item.command)} [${item.status}] ${item.reason}`),
   ].join("\n");
+}
+
+function renderProbeResults(report) {
+  const probeStatus = report.probe_status ?? "not_requested";
+  const lines = [`Probe status: ${probeStatus}`];
+  if (report.probe_config) {
+    lines.push(
+      `Policy: command_set=${report.probe_config.command_set ?? "n/a"}, network=${report.probe_config.network_policy ?? "n/a"}, approval=${report.probe_config.approval_id ?? "n/a"}`,
+    );
+    const denied = report.probe_config.denied_commands ?? [];
+    if (denied.length > 0) {
+      lines.push("Denied candidate commands:");
+      lines.push(...denied.map((item) => `- ${formatCommand(item.command)}: ${formatDeniedContext(item)}${item.reason}`));
+    }
+    if (report.probe_config.next_evidence_action) {
+      lines.push(
+        `Next evidence action: ${report.probe_config.next_evidence_action.action} - ${report.probe_config.next_evidence_action.reason}`,
+      );
+    }
+  }
+  const sandboxRuns = report.sandbox_runs ?? [];
+  if (sandboxRuns.length > 0) {
+    lines.push("Sandbox runs:");
+    lines.push(
+      ...sandboxRuns.map(
+        (run) =>
+          `- ${run.sandbox_id}: ${run.lifecycle_status}, network=${run.network_policy}, cleanup=${run.cleanup_status}`,
+      ),
+    );
+  }
+  if (probeStatus === "not_requested") {
+    lines.push("No dynamic probe was requested for this report.");
+  }
+  return lines.join("\n");
 }
 
 function renderMonitorEvents(events) {
@@ -258,4 +372,16 @@ function renderNextActions(decisions) {
 
 function escapeCell(value) {
   return String(value).replaceAll("|", "\\|").replaceAll("\n", " ");
+}
+
+function formatCommand(command) {
+  if (Array.isArray(command)) {
+    return command.join(" ");
+  }
+  return String(command);
+}
+
+function formatDeniedContext(item) {
+  const source = [item.source_ref, item.source_range].filter(Boolean).join(" ");
+  return source ? `(${source}) ` : "";
 }

@@ -63,4 +63,21 @@ describe("policy controls", () => {
     assert.equal(decision.decision, "denied");
     assert.match(decision.reason, /unknown or not allowlisted/);
   });
+
+  it("keeps sandbox operations approval-bound to dynamic probe mode", () => {
+    for (const operation of fixtures.metadata_only.sandbox_operations) {
+      assert.equal(decideOperation(defaultPolicy("metadata_only"), operation, "approval-1").decision, "denied");
+      assert.equal(decideOperation(defaultPolicy("static_inspection"), operation, "approval-1").decision, "denied");
+      assert.equal(decideOperation(defaultPolicy("dynamic_probe"), operation).decision, "denied");
+      assert.equal(decideOperation(defaultPolicy("dynamic_probe"), operation, "approval-1").decision, "allowed");
+    }
+  });
+
+  it("still denies install, repo script, and GitHub write actions in dynamic probe mode", () => {
+    const policy = defaultPolicy("dynamic_probe");
+
+    assert.equal(decideOperation(policy, "package_install", "approval-1").decision, "denied");
+    assert.equal(decideOperation(policy, "repo_script_execution", "approval-1").decision, "denied");
+    assert.equal(decideOperation(policy, "github_pr_open", "approval-1").decision, "denied");
+  });
 });

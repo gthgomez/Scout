@@ -1,5 +1,7 @@
 {
   "validReport": {
+    "run_status": "complete",
+    "collection_errors": [],
     "candidates": [
       {
         "candidate_id": "SCOUT-alpha-green-1",
@@ -25,7 +27,8 @@
             "trust_level": "OBSERVED"
           }
         ],
-        "collection_status": "OBSERVED"
+        "collection_status": "OBSERVED",
+        "static_inspection_status": "static_docs_ok"
       }
     ],
     "evidence": [
@@ -67,6 +70,8 @@
     "monitor_events": []
   },
   "falseSetupClaimReport": {
+    "run_status": "complete",
+    "collection_errors": [],
     "candidates": [
       {
         "candidate_id": "SCOUT-alpha-green-1",
@@ -92,7 +97,8 @@
             "trust_level": "OBSERVED"
           }
         ],
-        "collection_status": "OBSERVED"
+        "collection_status": "OBSERVED",
+        "static_inspection_status": "static_docs_ok"
       }
     ],
     "evidence": [
