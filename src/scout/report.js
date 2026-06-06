@@ -340,7 +340,7 @@ function renderProbeResults(report) {
     lines.push(
       ...sandboxRuns.map(
         (run) =>
-          `- ${run.sandbox_id}: ${run.lifecycle_status}, network=${run.network_policy}, cleanup=${run.cleanup_status}`,
+          `- ${run.sandbox_id}: ${run.lifecycle_status}, image=${run.image_ref}, image_digest=${run.image_digest ?? "unknown"}, network=${run.network_policy}, cleanup=${run.cleanup_status}, limits=${formatResourceLimits(run.resource_limits)}`,
       ),
     );
   }
@@ -384,4 +384,15 @@ function formatCommand(command) {
 function formatDeniedContext(item) {
   const source = [item.source_ref, item.source_range].filter(Boolean).join(" ");
   return source ? `(${source}) ` : "";
+}
+
+function formatResourceLimits(limits) {
+  if (!limits) return "unknown";
+  return [
+    `timeout=${limits.timeout_seconds}s`,
+    `cpu=${limits.cpu_count}`,
+    `memory=${limits.memory_mb}mb`,
+    `pids=${limits.pids_limit}`,
+    `disk=${limits.disk_mb}mb`,
+  ].join("/");
 }

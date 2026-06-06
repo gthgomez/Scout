@@ -9,6 +9,7 @@ import {
   buildDockerRunArgs,
   createProbePlan,
   createSandboxPolicy,
+  DockerSandboxRunner,
   FakeSandboxRunner,
   probeDoctor,
   runProbe,
@@ -54,6 +55,34 @@ describe("dynamic probe planning and runners", () => {
         }),
       /static inspection evidence/,
     );
+  });
+
+  it("keeps registry_allowlist unavailable to executable probes", () => {
+    assert.throws(
+      () =>
+        createProbePlan({
+          report: reportFixtures.validReport,
+          candidateId: "SCOUT-alpha-green-1",
+          approvalId: "approval-1",
+          network: "registry_allowlist",
+        }),
+      /Unsupported probe network policy/,
+    );
+  });
+
+  it("keeps install and test command sets unavailable to executable probes", () => {
+    for (const commandSet of ["install_probe_design", "test_probe_design"]) {
+      assert.throws(
+        () =>
+          createProbePlan({
+            report: reportFixtures.validReport,
+            candidateId: "SCOUT-alpha-green-1",
+            approvalId: "approval-1",
+            commandSet,
+          }),
+        /Unsupported probe command set/,
+      );
+    }
   });
 
   it("builds readonly argv commands and denies unsafe README-style commands", () => {
@@ -152,6 +181,8 @@ describe("dynamic probe planning and runners", () => {
     assert.equal(args[args.indexOf("--pull") + 1], "never");
     assert.equal(args[args.indexOf("--network") + 1], "none");
     assert.ok(args.includes("--read-only"));
+    assert.equal(args.includes("GITHUB_TOKEN"), false);
+    assert.equal(args.includes("SSH_AUTH_SOCK"), false);
     assert.equal(args.at(-2), "node:20-alpine");
     assert.equal(args.at(-1), "--version");
   });
@@ -173,6 +204,38 @@ describe("dynamic probe planning and runners", () => {
     assert.equal(diagnosis.docker_cli_available, true);
     assert.equal(diagnosis.image_available, false);
     assert.equal(calls.length, 2);
+  });
+
+  it("records local Docker image digest when creating a real sandbox", async () => {
+    const runner = new DockerSandboxRunner({
+      commandRunner: async (_command, args) => {
+        if (args[0] === "version") {
+          return { exit_code: 0, stdout: "29.2.1\n", stderr: "" };
+        }
+        return { exit_code: 0, stdout: "[\"node@sha256:abc123\"]\n", stderr: "" };
+      },
+    });
+
+    const sandbox = await runner.createSandbox(createSandboxPolicy({ image: "node:20-alpine" }));
+
+    assert.equal(sandbox.image, "node:20-alpine");
+    assert.equal(sandbox.image_digest, "node@sha256:abc123");
+  });
+
+  it("fails closed when the Docker sandbox image is not local", async () => {
+    const runner = new DockerSandboxRunner({
+      commandRunner: async (_command, args) => {
+        if (args[0] === "version") {
+          return { exit_code: 0, stdout: "29.2.1\n", stderr: "" };
+        }
+        return { exit_code: 1, stdout: "", stderr: "No such image" };
+      },
+    });
+
+    await assert.rejects(
+      () => runner.createSandbox(createSandboxPolicy({ image: "node:20-alpine" })),
+      /not available locally.*pulls are disabled/,
+    );
   });
 
   it("runs a full fake lifecycle and records command attempts, sandbox runs, and artifacts", async () => {

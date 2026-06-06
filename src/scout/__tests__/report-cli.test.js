@@ -138,6 +138,40 @@ describe("report utilities", () => {
     assert.equal(report.triage_config.effective_thresholds.green_min_score, 101);
     assert.equal(report.triage_config.effective_thresholds.max_issue_age_days, 365);
   });
+
+  it("renders sandbox image, cleanup, and resource limits in probe results", () => {
+    const report = createReportModel({
+      ...reportFixtures.validReport,
+      sandbox_runs: [
+        {
+          sandbox_id: "docker-run-1",
+          image: "node:20-alpine",
+          image_ref: "node:20-alpine",
+          image_digest: "node@sha256:abc123",
+          created_at: "2026-06-05T00:00:00.000Z",
+          destroyed_at: "2026-06-05T00:00:01.000Z",
+          cleanup_status: "removed",
+          lifecycle_status: "destroyed",
+          network_policy: "none",
+          resource_limits: {
+            timeout_seconds: 60,
+            cpu_count: 1,
+            memory_mb: 512,
+            pids_limit: 128,
+            disk_mb: 256,
+          },
+        },
+      ],
+      probe_status: "complete",
+    });
+
+    const output = renderMarkdownReport(report);
+
+    assert.ok(output.includes("image=node:20-alpine"));
+    assert.ok(output.includes("image_digest=node@sha256:abc123"));
+    assert.ok(output.includes("cleanup=removed"));
+    assert.ok(output.includes("limits=timeout=60s/cpu=1/memory=512mb/pids=128/disk=256mb"));
+  });
 });
 
 describe("report CLI commands", () => {

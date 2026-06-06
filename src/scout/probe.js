@@ -273,11 +273,17 @@ export class FakeSandboxRunner {
 }
 
 export class DockerSandboxRunner {
+  constructor({ commandRunner = runHostCommand } = {}) {
+    this.commandRunner = commandRunner;
+  }
+
   async createSandbox(policy) {
     validateDockerPolicy(policy);
+    const imageInfo = await inspectLocalDockerImage(policy.image, this.commandRunner);
     return {
       sandbox_id: `docker-run-${Date.now()}`,
       image: policy.image,
+      image_digest: imageInfo.image_digest,
       created_at: new Date().toISOString(),
       policy,
     };
@@ -408,6 +414,27 @@ export async function probeDoctor({ image = DEFAULT_SANDBOX_POLICY.image, comman
     image_available: imageAvailable,
     image_digest: imageDigest,
     checks,
+  };
+}
+
+export async function inspectLocalDockerImage(image, commandRunner = runHostCommand) {
+  const version = await commandRunner("docker", ["version", "--format", "{{.Client.Version}}"]);
+  if (version.exit_code !== 0) {
+    const reason = version.stderr || version.error || "Docker CLI is unavailable.";
+    throw new Error(`Docker CLI is unavailable for Scout probes: ${reason}`);
+  }
+
+  const inspect = await commandRunner("docker", ["image", "inspect", image, "--format", "{{json .RepoDigests}}"]);
+  if (inspect.exit_code !== 0) {
+    const reason = inspect.stderr || inspect.error || "image was not found locally";
+    throw new Error(
+      `Docker sandbox image ${image} is not available locally; Scout probes fail closed because Docker pulls are disabled with --pull never. ${reason}`,
+    );
+  }
+
+  return {
+    image,
+    image_digest: parseImageDigest(inspect.stdout) ?? image,
   };
 }
 
