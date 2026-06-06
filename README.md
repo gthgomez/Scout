@@ -17,7 +17,7 @@ Current implementation status:
 - Implemented: metadata discovery, profile create/run, trusted seed lists, threshold overrides, metadata monitoring, triage/ranking, report generation, report validation, explain, shortlist export, Codex workflow artifacts, static manifest inspection, and policy-gated GitHub zip archive inspection.
 - Static inspection fetches GitHub zip archives in `static_inspection` mode, validates archive entries, extracts only allowlisted static files to a temp workspace, parses those files as data for setup/risk signals, and removes the temp workspace.
 - Discovery records GitHub REST rate-limit headers when present, and static inspection flags prompt-injection text, private/paid services, hidden environment requirements, credential placeholders, lifecycle scripts, and conflicting package managers.
-- Release 2 implemented: approval-bound Docker-backed readonly probes for one statically inspected candidate at a time, structured setup intelligence, denied command provenance, and Docker probe diagnostics.
+- Release 2 implemented through R2C: approval-bound Docker-backed readonly probes for one statically inspected candidate at a time, structured setup intelligence, denied command provenance, local Docker/image preflight, no-pull fail-closed behavior, and sandbox resource/cleanup reporting.
 - Not implemented: package installs, repo commands, repository-defined scripts, networked dependency probes, GitHub write actions, and issue-to-patch work.
 
 Scout still denies:
@@ -46,7 +46,7 @@ Top-level help is available with `node src/scout/cli.js --help` or `node src/sco
 
 `probe` is available only for Release 2's narrow sandbox contract: one candidate from an existing static-inspection report, explicit `--approval-id`, `--network none`, and `--command-set readonly`. It does not install packages, run tests, execute repo scripts, start services, claim issues, or write to GitHub.
 
-`probe doctor` checks whether the Docker CLI and local sandbox image are available. The Docker runner uses `--pull never`; if the image is missing, Scout fails closed instead of pulling from a registry.
+`probe doctor` checks whether the Docker CLI and local sandbox image are available. The Docker runner performs the same local-image preflight before creating a sandbox and uses `--pull never`; if the image is missing, Scout fails closed instead of pulling from a registry.
 
 ## Codex Workflow
 
@@ -83,9 +83,10 @@ Release 2 dynamic probing is intentionally small:
 - README-suggested commands like `npm install`, `pip install`, `make test`, `docker compose up`, and `curl | bash` are recorded as denied commands with source file/line context, not executed.
 - Probe reports add `CommandAttempt`, `SandboxRun`, `probe_config`, `probe_status`, structured setup intelligence, and sandbox command evidence records.
 - Docker probes require the sandbox image to be local because Docker pulls are disabled with `--pull never`.
+- Sandbox reports include image ref/digest when available, network policy, resource limits, lifecycle status, and cleanup status.
 - `setup_status=passed` remains invalid unless a successful matching command attempt exists. Readonly version checks do not imply dependencies were installed or tests passed.
 
-Future networked probes are design-only for now. Registry allowlists, lifecycle-script handling, dependency install probes, package egress logs, and `full_egress_audited` require a later explicit implementation and approval contract.
+Future networked probes are design/dry-run only for now. Scout has R2D contract helpers for registry allowlist approval text, lifecycle-script policy, and future egress log records. It also has R2E dry-run helpers for proposed install probes and R2G decision-cockpit helpers. The executable CLI still supports only `--network none --command-set readonly`. Dependency install execution, test execution, package egress enforcement, and `full_egress_audited` require a later explicit implementation and approval contract.
 
 ## Release 2 Autonomy Roadmap
 
@@ -95,11 +96,31 @@ Scout should become more autonomous by gathering safer evidence in layers:
 | --- | --- | --- |
 | R2A Sandbox Probe Foundation | done | Current no-network readonly Docker probe contract. |
 | R2B Probe Planning Intelligence | done | Structured setup extraction, ecosystem/workspace detection, denied command source context, and next safest action. |
-| R2C Sandbox Observability | done | Docker diagnostics, local-image checks, no-pull runner args, cleanup proof, resource summaries, and clearer sandbox status. |
-| R2D Network Expansion Design | planned design-only | Registry allowlist, egress logs, lifecycle policy, and exact approval text. No installs. |
-| R2E Install Probe Beta | blocked pending R2D | Disabled-by-default dependency install probes with registry allowlist and lifecycle controls. |
-| R2F Test Probe Beta | blocked pending R2E | Human-approved allowlisted test execution only after install policy is safe. |
-| R2G Decision Cockpit Reports | planned | Candidate comparison, confidence categories, "why not GREEN?", next probe, and coding handoff package. |
-| R2H Adversarial Eval Suite | in progress | Malicious setup commands, spoofed output, timeout/cleanup failures, archive tricks, and Windows path escaping coverage. |
+| R2C Sandbox Observability | done | Docker diagnostics, local-image fail-closed preflight, no-pull runner args, image ref/digest reporting, cleanup proof, resource summaries, and clearer sandbox status. |
+| R2D Network Expansion Design | done design-only | Registry allowlist contract, egress log shape, lifecycle policy, and exact approval text. No installs. |
+| R2E Install Probe Dry Run | done dry-run | Builds proposed install-probe plans from R2D contracts and static setup intelligence. No installs. |
+| R2F Test Probe Design Gate | done design-only | Produces blocked test-probe design plans requiring install-probe evidence before any future execution. |
+| R2G Decision Cockpit Reports | done helper | Candidate confidence categories, "why not GREEN?", next evidence action, and advisory coding handoff package. |
+| R2H Adversarial Eval Suite | in progress | Malicious setup commands, spoofed output, false pass claims, timeout/cleanup failures, archive tricks, and Windows path escaping coverage. |
 
 Autonomy boundary: Scout may recommend the next safest evidence-gathering step, but it still does not perform GitHub writes, claim issues, fork, branch, open PRs, edit candidate source, or become the coding workflow.
+
+## R2D Network Expansion Design
+
+R2D defines future-network contracts only. The helpers validate registry host allowlists, lifecycle-script policy, approval phrase coverage, and future egress log records. They do not add a CLI command and do not make `registry_allowlist` executable.
+
+Example future approval phrase shape:
+
+```text
+APPROVE SCOUT R2D SCOUT-alpha-green-1 acme/tooling https://github.com/acme/tooling/issues/12 registry_allowlist registry.npmjs.org pypi.org files.pythonhosted.org install_probe_design scripts_disabled 120 retain_stdout_stderr_7_days
+```
+
+That phrase must name the candidate ID, repo, issue, network policy, registry hosts, command set, lifecycle policy, timeout, and artifact retention. Runtime probes must continue rejecting `registry_allowlist` until a later approved implementation consumes the R2D contract.
+
+## R2E-R2G Dry-Run And Report Helpers
+
+R2E install-probe helpers consume an R2D contract plus static setup intelligence and render proposed install commands as dry-run text only. Plans always use `execution_status=not_executed`; they never create `CommandAttempt` records and never set `setup_status=passed`.
+
+R2F test-probe design helpers remain blocked behind future install-probe evidence. They can identify static manifest-derived test commands, but test execution is not implemented.
+
+R2G decision-cockpit helpers summarize confidence categories, why a candidate is not `GREEN`, what evidence would change the decision, the next safest evidence action, and an advisory handoff package. The handoff does not clone, claim, branch, push, open PRs, or write to GitHub.
