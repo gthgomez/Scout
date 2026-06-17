@@ -128,7 +128,7 @@ export async function discoverCandidates({
     const url = new URL("https://api.github.com/search/issues");
     url.searchParams.set("q", query);
     url.searchParams.set("per_page", String(Math.min(50, limit)));
-    const response = await fetchImpl(url, { headers: { Accept: "application/vnd.github+json" } });
+    const response = await fetchImpl(url, { headers: gitHubHeaders() });
     const rateLimit = gitHubRateLimitFromHeaders(response.headers);
     recordRateLimitObservation(auditLog, policy, "github_search_read", rateLimit, query);
     if (!response.ok) {
@@ -249,10 +249,7 @@ function applyProfileFilters(candidates, profile) {
 
 async function fetchGitHubJsonWithMetadata(url, fetchImpl, headers = {}) {
   const response = await fetchImpl(url, {
-    headers: {
-      Accept: "application/vnd.github+json",
-      ...headers,
-    },
+    headers: gitHubHeaders(headers),
   });
   if (!response.ok) {
     throw new Error(`GitHub API request failed for ${url} with status ${response.status ?? "unknown"}`);
@@ -260,6 +257,15 @@ async function fetchGitHubJsonWithMetadata(url, fetchImpl, headers = {}) {
   return {
     body: await response.json(),
     rate_limit: gitHubRateLimitFromHeaders(response.headers),
+  };
+}
+
+function gitHubHeaders(headers = {}) {
+  const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN || "";
+  return {
+    Accept: "application/vnd.github+json",
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...headers,
   };
 }
 
