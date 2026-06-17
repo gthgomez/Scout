@@ -101,7 +101,7 @@ Scout should become more autonomous by gathering safer evidence in layers:
 | R2E Install Probe Dry Run | done dry-run | Builds proposed install-probe plans from R2D contracts and static setup intelligence. No installs. |
 | R2F Test Probe Design Gate | done design-only | Produces blocked test-probe design plans requiring install-probe evidence before any future execution. |
 | R2G Decision Cockpit Reports | done helper | Candidate confidence categories, "why not GREEN?", next evidence action, and advisory coding handoff package. |
-| R2H Adversarial Eval Suite | in progress | Malicious setup commands, spoofed output, false pass claims, timeout/cleanup failures, archive tricks, and Windows path escaping coverage. |
+| R2H Adversarial Eval Suite | done | 33 adversarial tests covering Windows path escaping (backslash, drive letters, UNC, DOS devices), NULL byte injection, malicious setup commands, spoofed output, false pass claims, archive tricks, and integrated multi-vector scenarios. |
 
 Autonomy boundary: Scout may recommend the next safest evidence-gathering step, but it still does not perform GitHub writes, claim issues, fork, branch, open PRs, edit candidate source, or become the coding workflow.
 

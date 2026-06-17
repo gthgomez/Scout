@@ -9,6 +9,7 @@
   },
   "scripts": {
     "test": "node --test \"src/scout/__tests__/*.test.js\"",
+    "test:adversarial": "node --test \"src/scout/__tests__/adversarial-eval.test.js\"",
     "test:policy": "node --test \"src/scout/__tests__/policy.test.js\"",
     "check": "node --check src/scout/*.js",
     "lint": "eslint src/",

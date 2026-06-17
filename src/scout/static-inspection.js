@@ -96,6 +96,23 @@ function hasTraversalSegment(filePath) {
   return filePath.split("/").some((segment) => segment === "..");
 }
 
+// Windows DOS device names — blocked at the filesystem level on Windows.
+// These names (and any variant with an extension like CON.txt) are reserved
+// and resolve to devices rather than files.
+const DOS_DEVICE_PATTERN = /^(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\.[^/\\]*)?$/i;
+
+function isWindowsDosDevicePath(filePath) {
+  const normalized = normalizeArchivePath(filePath);
+  if (!normalized) return false;
+  return normalized.split("/").some((segment) => DOS_DEVICE_PATTERN.test(segment));
+}
+
+// NULL bytes in archive paths are a classic injection vector on C-based
+// filesystem implementations that truncate at NULL.
+function containsNullByte(filePath) {
+  return typeof filePath === "string" && (filePath.includes("\x00") || filePath.includes("%00"));
+}
+
 function parseManifestSize(entry) {
   const rawSize = readManifestField(entry, SIZE_FIELDS, 0);
   const size = Number(rawSize);
@@ -159,7 +176,7 @@ export function isSymlinkEscape(entry) {
   if (typeof target !== "string" || target.trim().length === 0) {
     return true;
   }
-  return isArchiveAbsolutePath(target) || isArchivePathTraversal(target);
+  return isArchiveAbsolutePath(target) || isArchivePathTraversal(target) || isWindowsDosDevicePath(target) || containsNullByte(target);
 }
 
 export function isAllowedStaticFilePath(filePath, patterns = STATIC_FILE_ALLOWLIST) {
@@ -232,10 +249,14 @@ export function validateArchiveManifestEntries(manifestEntries, options = {}) {
 
     if (typeof pathValue !== "string" || pathValue.trim().length === 0) {
       reasons.push("missing path");
+    } else if (containsNullByte(pathValue)) {
+      reasons.push("null byte in path");
     } else if (isArchiveAbsolutePath(pathValue)) {
       reasons.push("absolute path");
     } else if (isArchivePathTraversal(pathValue)) {
       reasons.push("path traversal");
+    } else if (isWindowsDosDevicePath(pathValue)) {
+      reasons.push("windows dos device path");
     } else if (!isDirectory && !isAllowedStaticFilePath(normalizedPath, patterns)) {
       ignored = true;
     }

@@ -16,9 +16,9 @@
 - **Monitor** — Profile-based change detection across runs
 - **GITHUB_TOKEN** auth — Bearer token support for authenticated GitHub API access
 
-### R2H 🔄 In Progress
+### R2H ✅ Complete
 
-- Adversarial eval suite
+- **Adversarial eval suite** (33 tests) — Windows path escaping (backslash traversal, drive letters, UNC, DOS devices), NULL byte injection, malicious setup commands (base64/hex/backtick/sudo), spoofed output detection, false pass claim validation, archive tricks (long paths, empty paths, symlink escape to DOS devices), integrated multi-vector adversarial scenarios
 
 ---
 
