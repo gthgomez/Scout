@@ -139,7 +139,7 @@ export async function runProbe({
   const sandboxRuns = [];
   const commandAttempts = [];
   let sandbox = null;
-  let cleanupStatus = "not_started";
+  let cleanupStatus;
   try {
     sandbox = await runner.createSandbox(plan.sandbox_policy);
     sandboxRuns.push(createSandboxRun({ sandbox, plan, status: "created", cleanupStatus: "pending" }));

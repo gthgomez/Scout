@@ -10,9 +10,15 @@
   "scripts": {
     "test": "node --test \"src/scout/__tests__/*.test.js\"",
     "test:policy": "node --test \"src/scout/__tests__/policy.test.js\"",
-    "check": "node --check src/scout/cli.js"
+    "check": "node --check src/scout/*.js",
+    "lint": "eslint src/",
+    "lint:fix": "eslint --fix src/"
   },
   "engines": {
     "node": ">=20"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.5.0"
   }
 }

@@ -367,10 +367,10 @@ async function workflow(args) {
 
 async function buildReport({ policy, limit, queries, profile = null }) {
   const auditLog = new AuditLog();
-  let candidates = [];
   const evidence = [];
   const collectionErrors = [];
   const activeQueries = queries ?? DEFAULT_QUERIES;
+  let candidates;
   try {
     candidates = await discoverCandidates({ policy, limit, queries: activeQueries, auditLog, collectionErrors, profile });
   } catch (error) {
@@ -466,7 +466,7 @@ function readJsonArg(args, name, fallback) {
   try {
     return JSON.parse(raw);
   } catch (error) {
-    throw new Error(`${name} must be valid JSON: ${error.message}`);
+    throw new Error(`${name} must be valid JSON: ${error.message}`, { cause: error });
   }
 }
 
@@ -495,7 +495,7 @@ async function loadJson(path) {
   try {
     report = JSON.parse(raw);
   } catch (error) {
-    throw new Error(`Unable to parse JSON at ${path}: ${error.message}`);
+    throw new Error(`Unable to parse JSON at ${path}: ${error.message}`, { cause: error });
   }
   return report;
 }

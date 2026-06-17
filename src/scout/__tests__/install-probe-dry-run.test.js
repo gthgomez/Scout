@@ -24,11 +24,6 @@ function candidateWithIntelligence(intelligence) {
         schema_version: 1,
         ecosystems: [],
         package_managers: [],
-        workspace: {
-          kind: "single_package",
-          manifest_paths: [],
-          test_paths: [],
-        },
         setup_claims: [
           {
             kind: "setup_docs",

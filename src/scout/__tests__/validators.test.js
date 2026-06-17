@@ -17,7 +17,6 @@ import {
 } from "../validators.js";
 
 const fixturePath = join(dirname(fileURLToPath(import.meta.url)), "fixtures");
-const candidates = JSON.parse(readFileSync(join(fixturePath, "candidates.json"), "utf8"));
 const monitoring = JSON.parse(readFileSync(join(fixturePath, "monitoring.json"), "utf8"));
 const profiles = JSON.parse(readFileSync(join(fixturePath, "profiles.json"), "utf8"));
 const reports = JSON.parse(readFileSync(join(fixturePath, "report-model.json"), "utf8"));

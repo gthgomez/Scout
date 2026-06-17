@@ -105,7 +105,7 @@ function parseTrustedSeedList(raw, options) {
   try {
     return validateTrustedSeedList(JSON.parse(raw), options);
   } catch (error) {
-    throw new Error(`Malformed trusted seed-list ${options.path}: ${error.message}`);
+    throw new Error(`Malformed trusted seed-list ${options.path}: ${error.message}`, { cause: error });
   }
 }
 
