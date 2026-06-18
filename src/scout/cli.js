@@ -1,6 +1,28 @@
 #!/usr/bin/env node
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
+
+// Minimal .env loader — no dependencies needed.
+// Loads KEY=VALUE pairs from <project>/.env into process.env (skips existing vars).
+async function loadEnv(projectRoot) {
+  const envPath = resolve(projectRoot, ".env");
+  try {
+    const raw = await readFile(envPath, "utf8");
+    for (const line of raw.split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#")) continue;
+      const eq = trimmed.indexOf("=");
+      if (eq === -1) continue;
+      const key = trimmed.slice(0, eq).trim();
+      const val = trimmed.slice(eq + 1).trim();
+      if (key && !(key in process.env)) {
+        process.env[key] = val.replace(/^["']|["']$/g, "");
+      }
+    }
+  } catch {
+    // .env file is optional — silent skip if missing or unreadable
+  }
+}
 import { defaultPolicy } from "./policy.js";
 import { DEFAULT_QUERIES, discoverCandidates } from "./discovery.js";
 import { AuditLog } from "./audit-log.js";
@@ -621,6 +643,7 @@ Release 2 probe is approval-bound, Docker-backed, no-network, readonly, one cand
 Scout still denies clone, installs, repo scripts, GitHub writes, issue claiming, forks, branches, PRs, and issue-to-patch workflows.`);
 }
 
+await loadEnv(process.cwd());
 main(process.argv.slice(2)).then(
   (code) => {
     process.exitCode = code;

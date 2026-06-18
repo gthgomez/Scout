@@ -1,0 +1,482 @@
+{
+  "generated_at": "2026-06-17T22:36:29.207Z",
+  "run_status": "complete",
+  "runtime_safety_status": "Release 1: no clone, no install, no repo scripts, no GitHub writes, no dynamic probes.",
+  "triage_config": {
+    "profile_id": "unprofiled",
+    "threshold_overrides": {},
+    "effective_thresholds": {
+      "green_min_score": 30,
+      "max_issue_age_days": 365,
+      "recent_repo_activity_days": 90,
+      "recent_maintainer_activity_days": 180,
+      "min_issue_title_length": 12,
+      "max_estimated_files_touched": 5
+    }
+  },
+  "collection_errors": [],
+  "candidates": [
+    {
+      "candidate_id": "SCOUT-preset-io-agor-1479",
+      "repo_owner": "preset-io",
+      "repo_name": "agor",
+      "repo_url": "https://github.com/preset-io/agor",
+      "issue_number": 1479,
+      "issue_title": "Ramp: Knowledge as team/assistant memory",
+      "issue_url": "https://github.com/preset-io/agor/issues/1479",
+      "labels": [
+        "enhancement",
+        "good first issue",
+        "roadmap"
+      ],
+      "issue_state": "open",
+      "assignees": [],
+      "created_at": "2026-06-17T22:35:45Z",
+      "updated_at": "2026-06-17T22:35:54Z",
+      "discovered_by_query": "is:issue state:open label:\"good first issue\" no:assignee language:TypeScript",
+      "archived": false,
+      "default_branch": "main",
+      "primary_language": "TypeScript",
+      "license_spdx": "NOASSERTION",
+      "latest_repo_activity_at": "2026-06-17T21:20:20Z",
+      "latest_maintainer_activity_at": null,
+      "linked_prs": [],
+      "source_observations": [
+        {
+          "kind": "github_rate_limit",
+          "value": "github_repo_metadata_read: 59/60 remaining",
+          "operation": "github_repo_metadata_read",
+          "rate_limit": {
+            "limit": 60,
+            "remaining": 59,
+            "reset_at": "2026-06-17T23:36:26.000Z",
+            "resource": "core",
+            "used": 1
+          }
+        },
+        {
+          "kind": "github_rate_limit",
+          "value": "github_issue_metadata_read: 58/60 remaining",
+          "operation": "github_issue_metadata_read",
+          "rate_limit": {
+            "limit": 60,
+            "remaining": 58,
+            "reset_at": "2026-06-17T23:36:26.000Z",
+            "resource": "core",
+            "used": 2
+          }
+        }
+      ],
+      "collection_status": "OBSERVED",
+      "static_inspection_status": "not_requested",
+      "claimed_in_comments": false
+    },
+    {
+      "candidate_id": "SCOUT-preset-io-agor-1478",
+      "repo_owner": "preset-io",
+      "repo_name": "agor",
+      "repo_url": "https://github.com/preset-io/agor",
+      "issue_number": 1478,
+      "issue_title": "Ramp: Slack / gateway flow polish",
+      "issue_url": "https://github.com/preset-io/agor/issues/1478",
+      "labels": [
+        "enhancement",
+        "good first issue",
+        "roadmap"
+      ],
+      "issue_state": "open",
+      "assignees": [],
+      "created_at": "2026-06-17T22:35:44Z",
+      "updated_at": "2026-06-17T22:35:44Z",
+      "discovered_by_query": "is:issue state:open label:\"good first issue\" no:assignee language:TypeScript",
+      "archived": false,
+      "default_branch": "main",
+      "primary_language": "TypeScript",
+      "license_spdx": "NOASSERTION",
+      "latest_repo_activity_at": "2026-06-17T21:20:20Z",
+      "latest_maintainer_activity_at": null,
+      "linked_prs": [],
+      "source_observations": [
+        {
+          "kind": "github_rate_limit",
+          "value": "github_repo_metadata_read: 55/60 remaining",
+          "operation": "github_repo_metadata_read",
+          "rate_limit": {
+            "limit": 60,
+            "remaining": 55,
+            "reset_at": "2026-06-17T23:36:26.000Z",
+            "resource": "core",
+            "used": 5
+          }
+        },
+        {
+          "kind": "github_rate_limit",
+          "value": "github_issue_metadata_read: 54/60 remaining",
+          "operation": "github_issue_metadata_read",
+          "rate_limit": {
+            "limit": 60,
+            "remaining": 54,
+            "reset_at": "2026-06-17T23:36:26.000Z",
+            "resource": "core",
+            "used": 6
+          }
+        }
+      ],
+      "collection_status": "OBSERVED",
+      "static_inspection_status": "not_requested",
+      "claimed_in_comments": false
+    },
+    {
+      "candidate_id": "SCOUT-preset-io-agor-1477",
+      "repo_owner": "preset-io",
+      "repo_name": "agor",
+      "repo_url": "https://github.com/preset-io/agor",
+      "issue_number": 1477,
+      "issue_title": "Ramp: MCP connectivity & connector install UX",
+      "issue_url": "https://github.com/preset-io/agor/issues/1477",
+      "labels": [
+        "enhancement",
+        "good first issue",
+        "roadmap"
+      ],
+      "issue_state": "open",
+      "assignees": [],
+      "created_at": "2026-06-17T22:35:43Z",
+      "updated_at": "2026-06-17T22:35:43Z",
+      "discovered_by_query": "is:issue state:open label:\"good first issue\" no:assignee language:TypeScript",
+      "archived": false,
+      "default_branch": "main",
+      "primary_language": "TypeScript",
+      "license_spdx": "NOASSERTION",
+      "latest_repo_activity_at": "2026-06-17T21:20:20Z",
+      "latest_maintainer_activity_at": null,
+      "linked_prs": [],
+      "source_observations": [
+        {
+          "kind": "github_rate_limit",
+          "value": "github_repo_metadata_read: 51/60 remaining",
+          "operation": "github_repo_metadata_read",
+          "rate_limit": {
+            "limit": 60,
+            "remaining": 51,
+            "reset_at": "2026-06-17T23:36:26.000Z",
+            "resource": "core",
+            "used": 9
+          }
+        },
+        {
+          "kind": "github_rate_limit",
+          "value": "github_issue_metadata_read: 50/60 remaining",
+          "operation": "github_issue_metadata_read",
+          "rate_limit": {
+            "limit": 60,
+            "remaining": 50,
+            "reset_at": "2026-06-17T23:36:26.000Z",
+            "resource": "core",
+            "used": 10
+          }
+        }
+      ],
+      "collection_status": "OBSERVED",
+      "static_inspection_status": "not_requested",
+      "claimed_in_comments": false
+    }
+  ],
+  "evidence": [
+    {
+      "evidence_id": "evidence-metadata-SCOUT-preset-io-agor-1479",
+      "candidate_id": "SCOUT-preset-io-agor-1479",
+      "source_type": "GITHUB_API",
+      "source_ref": "https://github.com/preset-io/agor/issues/1479",
+      "observed_at": "2026-06-17T22:36:29.206Z",
+      "trust_level": "OBSERVED",
+      "claim": "GitHub metadata collected for preset-io/agor#1479 with collection_status=OBSERVED.",
+      "supports": "candidate metadata and triage input"
+    },
+    {
+      "evidence_id": "evidence-metadata-SCOUT-preset-io-agor-1478",
+      "candidate_id": "SCOUT-preset-io-agor-1478",
+      "source_type": "GITHUB_API",
+      "source_ref": "https://github.com/preset-io/agor/issues/1478",
+      "observed_at": "2026-06-17T22:36:29.206Z",
+      "trust_level": "OBSERVED",
+      "claim": "GitHub metadata collected for preset-io/agor#1478 with collection_status=OBSERVED.",
+      "supports": "candidate metadata and triage input"
+    },
+    {
+      "evidence_id": "evidence-metadata-SCOUT-preset-io-agor-1477",
+      "candidate_id": "SCOUT-preset-io-agor-1477",
+      "source_type": "GITHUB_API",
+      "source_ref": "https://github.com/preset-io/agor/issues/1477",
+      "observed_at": "2026-06-17T22:36:29.206Z",
+      "trust_level": "OBSERVED",
+      "claim": "GitHub metadata collected for preset-io/agor#1477 with collection_status=OBSERVED.",
+      "supports": "candidate metadata and triage input"
+    }
+  ],
+  "decisions": [
+    {
+      "candidate_id": "SCOUT-preset-io-agor-1479",
+      "verdict": "YELLOW",
+      "rank": 1,
+      "score": 25,
+      "portfolio_score": 0,
+      "drop_reason": null,
+      "gap_codes": [
+        "SOURCE_GAP"
+      ],
+      "risk_summary": "Setup guidance has not been confirmed.",
+      "setup_status": "unknown",
+      "abandon_criteria": "Abandon if the issue is claimed, solved by a linked PR, or requires private credentials.",
+      "human_next_action": "Review evidence gaps before pursuing.",
+      "score_reasons": [
+        "+25 issue clarity",
+        "+15 repo activity",
+        "+10 stack fit",
+        "-25 unclear setup"
+      ],
+      "portfolio_reasons": [],
+      "threshold_policy": {
+        "profile_id": "unprofiled",
+        "threshold_overrides": {},
+        "effective_thresholds": {
+          "green_min_score": 30,
+          "max_issue_age_days": 365,
+          "recent_repo_activity_days": 90,
+          "recent_maintainer_activity_days": 180,
+          "min_issue_title_length": 12,
+          "max_estimated_files_touched": 5
+        }
+      }
+    },
+    {
+      "candidate_id": "SCOUT-preset-io-agor-1478",
+      "verdict": "YELLOW",
+      "rank": 2,
+      "score": 25,
+      "portfolio_score": 0,
+      "drop_reason": null,
+      "gap_codes": [
+        "SOURCE_GAP"
+      ],
+      "risk_summary": "Setup guidance has not been confirmed.",
+      "setup_status": "unknown",
+      "abandon_criteria": "Abandon if the issue is claimed, solved by a linked PR, or requires private credentials.",
+      "human_next_action": "Review evidence gaps before pursuing.",
+      "score_reasons": [
+        "+25 issue clarity",
+        "+15 repo activity",
+        "+10 stack fit",
+        "-25 unclear setup"
+      ],
+      "portfolio_reasons": [],
+      "threshold_policy": {
+        "profile_id": "unprofiled",
+        "threshold_overrides": {},
+        "effective_thresholds": {
+          "green_min_score": 30,
+          "max_issue_age_days": 365,
+          "recent_repo_activity_days": 90,
+          "recent_maintainer_activity_days": 180,
+          "min_issue_title_length": 12,
+          "max_estimated_files_touched": 5
+        }
+      }
+    },
+    {
+      "candidate_id": "SCOUT-preset-io-agor-1477",
+      "verdict": "YELLOW",
+      "rank": 3,
+      "score": 25,
+      "portfolio_score": 0,
+      "drop_reason": null,
+      "gap_codes": [
+        "SOURCE_GAP"
+      ],
+      "risk_summary": "Setup guidance has not been confirmed.",
+      "setup_status": "unknown",
+      "abandon_criteria": "Abandon if the issue is claimed, solved by a linked PR, or requires private credentials.",
+      "human_next_action": "Review evidence gaps before pursuing.",
+      "score_reasons": [
+        "+25 issue clarity",
+        "+15 repo activity",
+        "+10 stack fit",
+        "-25 unclear setup"
+      ],
+      "portfolio_reasons": [],
+      "threshold_policy": {
+        "profile_id": "unprofiled",
+        "threshold_overrides": {},
+        "effective_thresholds": {
+          "green_min_score": 30,
+          "max_issue_age_days": 365,
+          "recent_repo_activity_days": 90,
+          "recent_maintainer_activity_days": 180,
+          "min_issue_title_length": 12,
+          "max_estimated_files_touched": 5
+        }
+      }
+    }
+  ],
+  "audit_events": [
+    {
+      "event_id": "audit-1781735787271-07bbd357d0ba08",
+      "timestamp": "2026-06-17T22:36:27.272Z",
+      "operation": "github_search_read",
+      "mode": "metadata_only",
+      "decision": "allowed",
+      "reason": "github_search_read is allowed in metadata_only mode.",
+      "candidate_id": null,
+      "approval_id": null,
+      "redactions_applied": true
+    },
+    {
+      "event_id": "audit-1781735787662-8c2152546910d8",
+      "timestamp": "2026-06-17T22:36:27.662Z",
+      "operation": "github_search_read",
+      "mode": "metadata_only",
+      "decision": "observed",
+      "reason": "GitHub rate limit 9/10 remaining for search resource.",
+      "candidate_id": "is:issue state:open label:\"good first issue\" no:assignee language:TypeScript",
+      "approval_id": null,
+      "redactions_applied": true
+    },
+    {
+      "event_id": "audit-1781735787666-d7ba40b84108a8",
+      "timestamp": "2026-06-17T22:36:27.666Z",
+      "operation": "github_repo_metadata_read",
+      "mode": "metadata_only",
+      "decision": "allowed",
+      "reason": "github_repo_metadata_read is allowed in metadata_only mode.",
+      "candidate_id": "SCOUT-preset-io-agor-1479",
+      "approval_id": null,
+      "redactions_applied": true
+    },
+    {
+      "event_id": "audit-1781735787821-4c70fe2fd7827",
+      "timestamp": "2026-06-17T22:36:27.821Z",
+      "operation": "github_repo_metadata_read",
+      "mode": "metadata_only",
+      "decision": "observed",
+      "reason": "GitHub rate limit 59/60 remaining for core resource.",
+      "candidate_id": "SCOUT-preset-io-agor-1479",
+      "approval_id": null,
+      "redactions_applied": true
+    },
+    {
+      "event_id": "audit-1781735787821-40a0b1b6d485a8",
+      "timestamp": "2026-06-17T22:36:27.821Z",
+      "operation": "github_issue_metadata_read",
+      "mode": "metadata_only",
+      "decision": "allowed",
+      "reason": "github_issue_metadata_read is allowed in metadata_only mode.",
+      "candidate_id": "SCOUT-preset-io-agor-1479",
+      "approval_id": null,
+      "redactions_applied": true
+    },
+    {
+      "event_id": "audit-1781735787989-309524788adb3",
+      "timestamp": "2026-06-17T22:36:27.989Z",
+      "operation": "github_issue_metadata_read",
+      "mode": "metadata_only",
+      "decision": "observed",
+      "reason": "GitHub rate limit 58/60 remaining for core resource.",
+      "candidate_id": "SCOUT-preset-io-agor-1479",
+      "approval_id": null,
+      "redactions_applied": true
+    },
+    {
+      "event_id": "audit-1781735788316-6905d03260fbd",
+      "timestamp": "2026-06-17T22:36:28.316Z",
+      "operation": "github_repo_metadata_read",
+      "mode": "metadata_only",
+      "decision": "allowed",
+      "reason": "github_repo_metadata_read is allowed in metadata_only mode.",
+      "candidate_id": "SCOUT-preset-io-agor-1478",
+      "approval_id": null,
+      "redactions_applied": true
+    },
+    {
+      "event_id": "audit-1781735788348-379254dc051888",
+      "timestamp": "2026-06-17T22:36:28.348Z",
+      "operation": "github_repo_metadata_read",
+      "mode": "metadata_only",
+      "decision": "observed",
+      "reason": "GitHub rate limit 55/60 remaining for core resource.",
+      "candidate_id": "SCOUT-preset-io-agor-1478",
+      "approval_id": null,
+      "redactions_applied": true
+    },
+    {
+      "event_id": "audit-1781735788348-1aee7a88f3a24",
+      "timestamp": "2026-06-17T22:36:28.348Z",
+      "operation": "github_issue_metadata_read",
+      "mode": "metadata_only",
+      "decision": "allowed",
+      "reason": "github_issue_metadata_read is allowed in metadata_only mode.",
+      "candidate_id": "SCOUT-preset-io-agor-1478",
+      "approval_id": null,
+      "redactions_applied": true
+    },
+    {
+      "event_id": "audit-1781735788490-cbc351cd7ed24",
+      "timestamp": "2026-06-17T22:36:28.490Z",
+      "operation": "github_issue_metadata_read",
+      "mode": "metadata_only",
+      "decision": "observed",
+      "reason": "GitHub rate limit 54/60 remaining for core resource.",
+      "candidate_id": "SCOUT-preset-io-agor-1478",
+      "approval_id": null,
+      "redactions_applied": true
+    },
+    {
+      "event_id": "audit-1781735788794-065a69aeee5498",
+      "timestamp": "2026-06-17T22:36:28.794Z",
+      "operation": "github_repo_metadata_read",
+      "mode": "metadata_only",
+      "decision": "allowed",
+      "reason": "github_repo_metadata_read is allowed in metadata_only mode.",
+      "candidate_id": "SCOUT-preset-io-agor-1477",
+      "approval_id": null,
+      "redactions_applied": true
+    },
+    {
+      "event_id": "audit-1781735788823-6204bb5f3bcbe",
+      "timestamp": "2026-06-17T22:36:28.823Z",
+      "operation": "github_repo_metadata_read",
+      "mode": "metadata_only",
+      "decision": "observed",
+      "reason": "GitHub rate limit 51/60 remaining for core resource.",
+      "candidate_id": "SCOUT-preset-io-agor-1477",
+      "approval_id": null,
+      "redactions_applied": true
+    },
+    {
+      "event_id": "audit-1781735788823-a975099a57d2b8",
+      "timestamp": "2026-06-17T22:36:28.823Z",
+      "operation": "github_issue_metadata_read",
+      "mode": "metadata_only",
+      "decision": "allowed",
+      "reason": "github_issue_metadata_read is allowed in metadata_only mode.",
+      "candidate_id": "SCOUT-preset-io-agor-1477",
+      "approval_id": null,
+      "redactions_applied": true
+    },
+    {
+      "event_id": "audit-1781735788964-54972f3fcdf0d",
+      "timestamp": "2026-06-17T22:36:28.964Z",
+      "operation": "github_issue_metadata_read",
+      "mode": "metadata_only",
+      "decision": "observed",
+      "reason": "GitHub rate limit 50/60 remaining for core resource.",
+      "candidate_id": "SCOUT-preset-io-agor-1477",
+      "approval_id": null,
+      "redactions_applied": true
+    }
+  ],
+  "monitor_events": [],
+  "command_attempts": [],
+  "sandbox_runs": [],
+  "probe_config": null,
+  "probe_status": "not_requested"
+}
