@@ -7,6 +7,7 @@ scout_report*.json
 scout_shortlist*.md
 scout_watch_report*.md
 scout_session*/
+scout_vespera_*
 .scout/
 .env
 .env.*
