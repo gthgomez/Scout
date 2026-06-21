@@ -1,28 +1,21 @@
-name: Test
+# DISABLED: This repo uses local CI only (no GitHub Actions minutes).
+# Run: npm run ci   or   pwsh ./scripts/ci.ps1
+#
+# To avoid accidental cloud runner usage, automatic triggers are removed.
+# workflow_dispatch is retained only as a manual escape hatch if you re-enable Actions later.
+
+name: Test (disabled — use local CI)
 
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
+  workflow_dispatch:
 
 jobs:
-  test:
+  local-ci-reminder:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        node-version: ["20", "22"]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ matrix.node-version }}
-      - name: Install dependencies
-        run: npm ci --ignore-scripts 2>/dev/null || true
-      - name: Syntax check (all source files)
+      - name: Use local CI instead
         run: |
-          for f in src/scout/*.js; do
-            node --check "$f" || exit 1
-          done
-      - name: Run tests
-        run: npm test
+          echo "GitHub Actions is disabled for this repository."
+          echo "From the repo root run: npm run ci"
+          echo "Or: pwsh ./scripts/ci.ps1"
+          exit 1

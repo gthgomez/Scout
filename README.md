@@ -64,3 +64,13 @@ Readonly `--network none --command-set readonly` probes remain the default safe 
 ## Policy Boundary
 
 Scout still denies unapproved clones, installs, repo scripts, GitHub writes, issue claiming, and coding workflows regardless of harness.
+
+## Local CI (no GitHub Actions)
+
+This repo does not use GitHub Actions for CI. Before push/PR, run:
+
+```powershell
+npm run ci
+```
+
+Or the full script: `pwsh ./scripts/ci.ps1`

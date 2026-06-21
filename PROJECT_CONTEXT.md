@@ -54,9 +54,22 @@ Regardless of harness:
 - `scout plan network-design --report <json> --candidate-id <id>`
 - `scout handoff --report <json> --json-out handoff_package.json`
 
+## Verification (local CI only)
+
+This project does **not** use GitHub Actions for CI (no cloud runner budget). Verify changes locally before push/PR:
+
+```powershell
+npm run ci
+# or full install + syntax check:
+pwsh ./scripts/ci.ps1
+```
+
+Agents must run local CI and report results; do not wait on or require GitHub Actions checks.
+
 ## Repository Layout
 
 - `src/scout/cli.js` — CLI entry
+- `scripts/ci.ps1` — local CI script (mirrors former Actions workflow)
 - `src/scout/profiles.js` — profiles and presets
 - `src/scout/discovery.js` — GitHub discovery + reward signals
 - `src/scout/triage.js` — intent-aware triage

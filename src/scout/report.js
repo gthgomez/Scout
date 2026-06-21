@@ -22,7 +22,7 @@ export function createReportModel({
   discovery_intent = undefined,
 }) {
   const resolvedIntent =
-    discovery_intent ?? resolveDiscoveryIntent(profile) ?? triage_config?.discovery_intent ?? "beginner";
+    discovery_intent ?? profile?.discovery_intent ?? triage_config?.discovery_intent ?? "beginner";
   return validateReportModel({
     generated_at: new Date().toISOString(),
     discovery_intent: resolvedIntent,

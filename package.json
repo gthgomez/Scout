@@ -11,9 +11,10 @@
     "test": "node --test \"src/scout/__tests__/*.test.js\"",
     "test:adversarial": "node --test \"src/scout/__tests__/adversarial-eval.test.js\"",
     "test:policy": "node --test \"src/scout/__tests__/policy.test.js\"",
-    "check": "node --check src/scout/*.js",
+    "check": "node scripts/check-syntax.js",
     "lint": "eslint src/",
-    "lint:fix": "eslint --fix src/"
+    "lint:fix": "eslint --fix src/",
+    "ci": "npm run check && npm test && npm run test:adversarial && npm run lint"
   },
   "engines": {
     "node": ">=20"
