@@ -57,7 +57,7 @@ describe("dynamic probe planning and runners", () => {
     );
   });
 
-  it("keeps registry_allowlist unavailable to executable probes", () => {
+  it("requires R2D approval contract for registry_allowlist install probes", () => {
     assert.throws(
       () =>
         createProbePlan({
@@ -65,12 +65,13 @@ describe("dynamic probe planning and runners", () => {
           candidateId: "SCOUT-alpha-green-1",
           approvalId: "approval-1",
           network: "registry_allowlist",
+          commandSet: "install_probe",
         }),
-      /Unsupported probe network policy/,
+      /network expansion contract/,
     );
   });
 
-  it("keeps install and test command sets unavailable to executable probes", () => {
+  it("rejects legacy design-only command sets for executable probes", () => {
     for (const commandSet of ["install_probe_design", "test_probe_design"]) {
       assert.throws(
         () =>
@@ -83,6 +84,35 @@ describe("dynamic probe planning and runners", () => {
         /Unsupported probe command set/,
       );
     }
+  });
+
+  it("blocks test_probe without prior install_probe evidence", () => {
+    const contract = {
+      contract_id: "r3c-test",
+      candidate_id: "SCOUT-alpha-green-1",
+      repo: "acme/tooling",
+      issue: "https://github.com/acme/tooling/issues/12",
+      network_policy: "registry_allowlist",
+      registry_hosts: ["registry.npmjs.org"],
+      command_set: "test_probe",
+      lifecycle_policy: "scripts_disabled",
+      timeout_seconds: 120,
+      artifact_retention: "retain_stdout_stderr_7_days",
+      approval_phrase:
+        "APPROVE SCOUT R2D SCOUT-alpha-green-1 acme/tooling https://github.com/acme/tooling/issues/12 registry_allowlist registry.npmjs.org test_probe scripts_disabled 120 retain_stdout_stderr_7_days",
+    };
+    assert.throws(
+      () =>
+        createProbePlan({
+          report: reportFixtures.validReport,
+          candidateId: "SCOUT-alpha-green-1",
+          approvalId: contract.approval_phrase,
+          network: "registry_allowlist",
+          commandSet: "test_probe",
+          networkContract: contract,
+        }),
+      /install_probe evidence/,
+    );
   });
 
   it("builds readonly argv commands and denies unsafe README-style commands", () => {
@@ -342,8 +372,15 @@ describe("dynamic probe planning and runners", () => {
 
   it("refuses unsafe Docker sandbox policy settings", () => {
     assert.throws(
-      () => validateDockerPolicy({ ...createSandboxPolicy(), network: "registry_allowlist" }),
-      /network/,
+      () => validateDockerPolicy({ ...createSandboxPolicy(), network: "registry_allowlist", registry_hosts: [] }),
+      /registry_hosts/,
+    );
+    assert.doesNotThrow(() =>
+      validateDockerPolicy({
+        ...createSandboxPolicy(),
+        network: "registry_allowlist",
+        registry_hosts: ["registry.npmjs.org"],
+      }),
     );
     assert.throws(
       () => validateDockerPolicy({ ...createSandboxPolicy(), allow_docker_socket: true }),

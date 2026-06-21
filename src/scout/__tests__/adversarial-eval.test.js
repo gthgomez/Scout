@@ -498,6 +498,74 @@ describe("R2H archive tricks", () => {
 });
 
 // =============================================================================
+// Category 8: R3B Registry Egress And Lifecycle Bypass
+// =============================================================================
+
+describe("R3B registry egress and lifecycle bypass", () => {
+  it("denies egress to hosts outside the approved registry allowlist", async () => {
+    const { evaluateEgressHost, createEgressLogRecord } = await import("../network-design.js");
+    const decision = evaluateEgressHost("evil.example.com", ["registry.npmjs.org", "pypi.org"]);
+    assert.equal(decision.decision, "denied");
+    const record = createEgressLogRecord({
+      candidateId: "SCOUT-alpha-green-1",
+      networkPolicy: "registry_allowlist",
+      approvedHosts: ["registry.npmjs.org"],
+      observedHost: "evil.example.com",
+      decision: decision.decision,
+      commandId: "cmd-escape-1",
+      reason: decision.reason,
+    });
+    assert.equal(record.decision, "denied");
+  });
+
+  it("blocks install_probe planning when lifecycle scripts lack a controlled policy", async () => {
+    const { createInstallProbeDryRunPlan } = await import("../install-probe-dry-run.js");
+    const { readFileSync } = await import("node:fs");
+    const { join, dirname } = await import("node:path");
+    const { fileURLToPath } = await import("node:url");
+    const fixturesPath = join(dirname(fileURLToPath(import.meta.url)), "fixtures");
+    const reportFixtures = JSON.parse(readFileSync(join(fixturesPath, "report-model.json"), "utf8"));
+    const candidate = {
+      ...reportFixtures.validReport.candidates[0],
+      static_inspection_status: "static_docs_ok",
+      static_inspection: {
+        setup_intelligence: {
+          ecosystems: ["node"],
+          package_managers: ["npm"],
+          setup_claims: [],
+          denied_commands: [],
+          risk_signals: [{ kind: "npm_lifecycle_script", source_ref: "package.json", detail: "postinstall" }],
+          recommended_next_evidence_action: { action: "human_review", reason: "Lifecycle risk" },
+          workspace: { kind: "single_package", manifest_paths: ["package.json"], test_paths: [] },
+        },
+      },
+    };
+    const report = {
+      ...reportFixtures.validReport,
+      candidates: [candidate],
+      evidence: reportFixtures.validReport.evidence,
+    };
+    const contract = {
+      contract_id: "r3b-lifecycle",
+      candidate_id: candidate.candidate_id,
+      repo: `${candidate.repo_owner}/${candidate.repo_name}`,
+      issue: candidate.issue_url,
+      network_policy: "registry_allowlist",
+      registry_hosts: ["registry.npmjs.org"],
+      command_set: "install_probe_design",
+      lifecycle_policy: "unsupported_fail_closed",
+      timeout_seconds: 120,
+      artifact_retention: "retain_stdout_stderr_7_days",
+      approval_phrase:
+        "APPROVE SCOUT R2D SCOUT-alpha-green-1 acme/tooling https://github.com/acme/tooling/issues/12 registry_allowlist registry.npmjs.org install_probe_design unsupported_fail_closed 120 retain_stdout_stderr_7_days",
+    };
+    const plan = createInstallProbeDryRunPlan(report, candidate.candidate_id, contract);
+    assert.equal(plan.status, "unsupported_fail_closed");
+    assert.deepEqual(plan.proposed_argv, []);
+  });
+});
+
+// =============================================================================
 // Category 7: Integrated Adversarial Scenarios
 // =============================================================================
 

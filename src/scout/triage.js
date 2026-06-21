@@ -1,3 +1,5 @@
+import { resolveDiscoveryIntent } from "./profiles.js";
+
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 export const DEFAULT_THRESHOLDS = Object.freeze({
@@ -40,8 +42,28 @@ export function resolveTriageConfig(profile = {}) {
   const threshold_overrides = profile?.threshold_overrides ?? {};
   return {
     profile_id: profile?.profile_id ?? "unprofiled",
+    discovery_intent: resolveDiscoveryIntent(profile),
     threshold_overrides,
     effective_thresholds: resolveThresholds(threshold_overrides),
+  };
+}
+
+export function resolveTriagePolicy(discovery_intent = "beginner") {
+  if (discovery_intent === "rewarded") {
+    return {
+      discovery_intent: "rewarded",
+      candidate_label: "Rewarded contribution candidate",
+      require_reward_signal_for_green: true,
+      deemphasize_too_trivial: true,
+      green_min_score_override: 15,
+    };
+  }
+  return {
+    discovery_intent: "beginner",
+    candidate_label: "Beginner contribution candidate",
+    require_reward_signal_for_green: false,
+    deemphasize_too_trivial: false,
+    green_min_score_override: null,
   };
 }
 
@@ -54,6 +76,8 @@ function daysSince(dateLike, now = new Date()) {
 
 export function scoreCandidate(candidate, options = {}) {
   const now = options.now ?? new Date();
+  const discoveryIntent = options.discovery_intent ?? resolveDiscoveryIntent(options.profile);
+  const triagePolicy = resolveTriagePolicy(discoveryIntent);
   const thresholds = resolveThresholds(options.threshold_overrides ?? options.profile?.threshold_overrides ?? {});
   let score = 0;
   const reasons = [];
@@ -86,11 +110,30 @@ export function scoreCandidate(candidate, options = {}) {
     score += 5;
     reasons.push("+5 small file-touch estimate");
   }
+
+  if (discoveryIntent === "rewarded") {
+    if (candidate.has_verified_reward_signal) {
+      score += 30;
+      reasons.push("+30 verified reward signal");
+    } else if (candidate.has_inferred_reward_signal) {
+      score += 15;
+      reasons.push("+15 inferred reward signal");
+    }
+    if (candidate.estimated_reward_usd) {
+      score += 10;
+      reasons.push("+10 payout amount mentioned");
+    }
+    if (candidate.has_acceptance_criteria) {
+      score += 10;
+      reasons.push("+10 acceptance criteria");
+    }
+  }
+
   if (daysSince(candidate.updated_at, now) > thresholds.max_issue_age_days) {
     score -= 20;
     reasons.push("-20 stale issue");
   }
-  if (!hasPositiveSetupDocs(candidate)) {
+  if (!hasPositiveSetupDocs(candidate) && discoveryIntent !== "rewarded") {
     score -= 25;
     reasons.push("-25 unclear setup");
   }
@@ -110,11 +153,16 @@ export function scoreCandidate(candidate, options = {}) {
     score -= 100;
     reasons.push("-100 archived, closed, or assigned");
   }
+  if (candidate.too_trivial && !triagePolicy.deemphasize_too_trivial) {
+    score -= 20;
+    reasons.push("-20 too trivial");
+  }
 
   return { score, reasons };
 }
 
-export function portfolioValueScore(candidate) {
+export function portfolioValueScore(candidate, options = {}) {
+  const discoveryIntent = options.discovery_intent ?? resolveDiscoveryIntent(options.profile);
   let score = 0;
   const reasons = [];
   if (candidate.latest_maintainer_activity_at) {
@@ -137,7 +185,7 @@ export function portfolioValueScore(candidate) {
     score += 10;
     reasons.push("+10 practical skill evidence");
   }
-  if (candidate.too_trivial) {
+  if (candidate.too_trivial && discoveryIntent !== "rewarded") {
     score -= 20;
     reasons.push("-20 too trivial");
   }
@@ -149,18 +197,44 @@ export function portfolioValueScore(candidate) {
     score -= 30;
     reasons.push("-30 weak contributor experience");
   }
+  if (discoveryIntent === "rewarded" && candidate.has_verified_reward_signal) {
+    score += 15;
+    reasons.push("+15 verified reward clarity");
+  }
   return { portfolio_score: score, portfolio_reasons: reasons };
+}
+
+export function buildIncomeSummary(candidate) {
+  if (!candidate.has_verified_reward_signal && !candidate.has_inferred_reward_signal) {
+    return null;
+  }
+  const parts = [];
+  if (candidate.has_verified_reward_signal) {
+    const labelSignals = (candidate.reward_signals ?? []).filter((signal) => signal.confidence === "OBSERVED");
+    if (labelSignals.length > 0) {
+      parts.push(`Observed ${labelSignals.map((signal) => signal.value).join(", ")} signal`);
+    }
+  }
+  if (candidate.estimated_reward_usd) {
+    parts.push(`$${candidate.estimated_reward_usd} mentioned in issue text (inferred, not verified payout)`);
+  } else if (candidate.has_inferred_reward_signal) {
+    parts.push("Inferred reward keywords in issue metadata");
+  }
+  return parts.length > 0 ? `${parts.join("; ")}. Scout does not verify payout or platform terms.` : null;
 }
 
 export function triageCandidate(candidate, options = {}) {
   const profile = options.profile ?? {
     profile_id: options.profile_id,
     threshold_overrides: options.threshold_overrides ?? {},
+    discovery_intent: options.discovery_intent,
   };
   const triageConfig = resolveTriageConfig(profile);
+  const triagePolicy = resolveTriagePolicy(triageConfig.discovery_intent);
   const hardDrop = hardDropReason(candidate);
-  const score = scoreCandidate(candidate, { ...options, threshold_overrides: triageConfig.threshold_overrides });
-  const portfolio = portfolioValueScore(candidate);
+  const score = scoreCandidate(candidate, { ...options, profile, discovery_intent: triageConfig.discovery_intent });
+  const portfolio = portfolioValueScore(candidate, { ...options, profile, discovery_intent: triageConfig.discovery_intent });
+  const incomeSummary = triageConfig.discovery_intent === "rewarded" ? buildIncomeSummary(candidate) : null;
 
   if (hardDrop) {
     return {
@@ -178,17 +252,46 @@ export function triageCandidate(candidate, options = {}) {
       score_reasons: score.reasons,
       portfolio_reasons: portfolio.portfolio_reasons,
       threshold_policy: triageConfig,
+      discovery_intent: triageConfig.discovery_intent,
+      candidate_label: triagePolicy.candidate_label,
+      income_summary: incomeSummary,
     };
   }
 
-  const stale = daysSince(candidate.updated_at, options.now ?? new Date()) > triageConfig.effective_thresholds.max_issue_age_days;
+  const now = options.now ?? new Date();
+  const greenMinScore = triagePolicy.green_min_score_override ?? triageConfig.effective_thresholds.green_min_score;
+  const stale = daysSince(candidate.updated_at, now) > triageConfig.effective_thresholds.max_issue_age_days;
   const partial = candidate.collection_status !== "OBSERVED";
   const setupDocumented = hasPositiveSetupDocs(candidate);
-  const verdict = partial
-    ? "GRAY"
-    : stale || !setupDocumented || score.score < triageConfig.effective_thresholds.green_min_score
-      ? "YELLOW"
-      : "GREEN";
+  const hasRewardSignal = candidate.has_verified_reward_signal || candidate.has_inferred_reward_signal;
+
+  let verdict;
+  let gapCodes;
+  let riskSummary;
+  let humanNextAction;
+
+  if (partial) {
+    verdict = "GRAY";
+    gapCodes = ["SOURCE_GAP"];
+    riskSummary = "Insufficient evidence for confident recommendation.";
+    humanNextAction = "Review evidence gaps before pursuing.";
+  } else if (triageConfig.discovery_intent === "rewarded" && !hasRewardSignal) {
+    verdict = "GRAY";
+    gapCodes = ["REWARD_GAP"];
+    riskSummary = "No reward or bounty signal detected in GitHub metadata.";
+    humanNextAction = "Review manually or broaden rewarded discovery queries before pursuing.";
+  } else if (triageConfig.discovery_intent === "rewarded") {
+    verdict = stale || score.score < greenMinScore ? "YELLOW" : "GREEN";
+    gapCodes = [];
+    riskSummary = incomeSummary ?? "Reward signal detected; payout not verified by Scout.";
+    humanNextAction = verdict === "GREEN" ? "Review reward terms manually before pursuing payout." : "Gather more reward clarity before pursuing.";
+  } else {
+    verdict = stale || !setupDocumented || score.score < greenMinScore ? "YELLOW" : "GREEN";
+    gapCodes = setupDocumented ? [] : ["SOURCE_GAP"];
+    riskSummary = setupDocumented ? "No hard drop detected." : "Setup guidance has not been confirmed.";
+    humanNextAction = verdict === "GREEN" ? "Review manually before claiming." : "Review evidence gaps before pursuing.";
+  }
+
   return {
     candidate_id: candidate.candidate_id,
     verdict,
@@ -196,18 +299,17 @@ export function triageCandidate(candidate, options = {}) {
     score: score.score,
     portfolio_score: portfolio.portfolio_score,
     drop_reason: null,
-    gap_codes: partial ? ["SOURCE_GAP"] : setupDocumented ? [] : ["SOURCE_GAP"],
-    risk_summary: partial
-      ? "Insufficient evidence for confident recommendation."
-      : setupDocumented
-        ? "No hard drop detected."
-        : "Setup guidance has not been confirmed.",
+    gap_codes: gapCodes,
+    risk_summary: riskSummary,
     setup_status: setupDocumented ? "static_docs_ok" : "unknown",
     abandon_criteria: "Abandon if the issue is claimed, solved by a linked PR, or requires private credentials.",
-    human_next_action: verdict === "GREEN" ? "Review manually before claiming." : "Review evidence gaps before pursuing.",
+    human_next_action: humanNextAction,
     score_reasons: score.reasons,
     portfolio_reasons: portfolio.portfolio_reasons,
     threshold_policy: triageConfig,
+    discovery_intent: triageConfig.discovery_intent,
+    candidate_label: triagePolicy.candidate_label,
+    income_summary: incomeSummary,
   };
 }
 

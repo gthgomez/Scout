@@ -43,6 +43,21 @@ import {
 } from "./static-inspection.js";
 import { DEFAULT_SANDBOX_POLICY, DockerSandboxRunner, probeDoctor, runProbe } from "./probe.js";
 import { validateReportModel } from "./validators.js";
+import {
+  createDecisionCockpitModel,
+  exportHandoffPackages,
+  renderDecisionCockpitSection,
+} from "./decision-cockpit.js";
+import {
+  createInstallProbeDryRunPlan,
+  renderInstallProbeDryRunSection,
+} from "./install-probe-dry-run.js";
+import {
+  renderNetworkApprovalText,
+  renderNetworkDesignReportSection,
+  validateNetworkExpansionContract,
+} from "./network-design.js";
+import { resolveDiscoveryIntent } from "./profiles.js";
 
 async function main(argv) {
   const [command, ...args] = argv;
@@ -80,6 +95,15 @@ async function main(argv) {
   }
   if (command === "probe") {
     return probeCommand(args);
+  }
+  if (command === "cockpit") {
+    return cockpitCommand(args);
+  }
+  if (command === "plan") {
+    return planCommand(args);
+  }
+  if (command === "handoff") {
+    return handoffCommand(args);
   }
   if (command === "test-policy") {
     console.log("Policy tests are available through npm test.");
@@ -165,6 +189,7 @@ async function probeCommand(args) {
   const network = readArg(args, "--network", "none");
   const commandSet = readArg(args, "--command-set", "readonly");
   const maxDurationSeconds = readLimit(readArg(args, "--max-duration-seconds", "60"));
+  const contractPath = readArg(args, "--contract", null);
 
   if (!reportPath) {
     throw new Error("probe requires --report <report.json>.");
@@ -177,6 +202,7 @@ async function probeCommand(args) {
   }
 
   const report = await loadReport(reportPath);
+  const networkContract = contractPath ? await loadJson(contractPath) : null;
   const probed = await runProbe({
     report,
     candidateId,
@@ -184,6 +210,7 @@ async function probeCommand(args) {
     network,
     commandSet,
     maxDurationSeconds,
+    networkContract,
     runner: new DockerSandboxRunner(),
     outputDir: join(".scout", "probe", candidateId),
   });
@@ -192,6 +219,121 @@ async function probeCommand(args) {
   console.log(`Scout probe report written to ${out}`);
   if (jsonOut) console.log(`Scout probe machine report written to ${jsonOut}`);
   return 0;
+}
+
+async function cockpitCommand(args) {
+  const reportPath = readArg(args, "--report", args[0]);
+  const out = readArg(args, "--out", "scout_cockpit.md");
+  const jsonOut = readArg(args, "--json-out", "scout_cockpit.json");
+  if (!reportPath) {
+    throw new Error("cockpit requires --report <report.json>.");
+  }
+  const report = await loadReport(reportPath);
+  const model = createDecisionCockpitModel(report);
+  await writeFile(out, renderDecisionCockpitSection(model), "utf8");
+  await writeFile(jsonOut, JSON.stringify(model, null, 2), "utf8");
+  console.log(`Scout decision cockpit written to ${out}`);
+  if (jsonOut) console.log(`Scout decision cockpit JSON written to ${jsonOut}`);
+  return 0;
+}
+
+async function planCommand(args) {
+  const action = args[0];
+  const reportPath = readArg(args, "--report", null);
+  const candidateId = readArg(args, "--candidate-id", null);
+  const contractPath = readArg(args, "--contract", null);
+  const out = readArg(args, "--out", null);
+  const jsonOut = readArg(args, "--json-out", null);
+  if (!reportPath) {
+    throw new Error("plan requires --report <report.json>.");
+  }
+  if (!candidateId) {
+    throw new Error("plan requires --candidate-id <candidate_id>.");
+  }
+  const report = await loadReport(reportPath);
+  const candidate = report.candidates.find((item) => item.candidate_id === candidateId);
+  if (!candidate) {
+    throw new Error(`Unknown candidate id: ${candidateId}`);
+  }
+
+  if (action === "install-dry-run") {
+    if (!contractPath) {
+      throw new Error("plan install-dry-run requires --contract <network-contract.json>.");
+    }
+    const contract = validateNetworkExpansionContract(await loadJson(contractPath));
+    const plan = createInstallProbeDryRunPlan(report, candidateId, contract);
+    const rendered = renderInstallProbeDryRunSection(plan);
+    const outputPath = out ?? "scout_install_dry_run.md";
+    await writeFile(outputPath, rendered, "utf8");
+    if (jsonOut) await writeFile(jsonOut, JSON.stringify(plan, null, 2), "utf8");
+    console.log(`Scout install dry-run plan written to ${outputPath}`);
+    return 0;
+  }
+
+  if (action === "network-design") {
+    const contract = validateNetworkExpansionContract(
+      contractPath
+        ? await loadJson(contractPath)
+        : buildDefaultNetworkContract(candidate),
+    );
+    const rendered = [
+      renderNetworkDesignReportSection(contract),
+      "",
+      renderNetworkApprovalText(contract),
+    ].join("\n");
+    const outputPath = out ?? "scout_network_design.md";
+    await writeFile(outputPath, rendered, "utf8");
+    if (jsonOut) await writeFile(jsonOut, JSON.stringify(contract, null, 2), "utf8");
+    console.log(`Scout network design written to ${outputPath}`);
+    return 0;
+  }
+
+  throw new Error("plan command requires install-dry-run or network-design");
+}
+
+async function handoffCommand(args) {
+  const reportPath = readArg(args, "--report", args[0]);
+  const jsonOut = readArg(args, "--json-out", "handoff_package.json");
+  if (!reportPath) {
+    throw new Error("handoff requires --report <report.json>.");
+  }
+  const report = await loadReport(reportPath);
+  const handoff = exportHandoffPackages(report);
+  await writeFile(jsonOut, JSON.stringify(handoff, null, 2), "utf8");
+  console.log(`Scout handoff package written to ${jsonOut}`);
+  return 0;
+}
+
+function buildDefaultNetworkContract(candidate) {
+  const repo = `${candidate.repo_owner}/${candidate.repo_name}`;
+  const registryHosts = ["registry.npmjs.org", "pypi.org", "files.pythonhosted.org"];
+  const fields = {
+    contract_id: `r3d-${candidate.candidate_id}`,
+    candidate_id: candidate.candidate_id,
+    repo,
+    issue: candidate.issue_url,
+    network_policy: "registry_allowlist",
+    registry_hosts: registryHosts,
+    command_set: "install_probe_design",
+    lifecycle_policy: "scripts_disabled",
+    timeout_seconds: 120,
+    artifact_retention: "retain_stdout_stderr_7_days",
+  };
+  return {
+    ...fields,
+    approval_phrase: [
+      "APPROVE SCOUT R2D",
+      fields.candidate_id,
+      fields.repo,
+      fields.issue,
+      fields.network_policy,
+      ...registryHosts,
+      fields.command_set,
+      fields.lifecycle_policy,
+      String(fields.timeout_seconds),
+      fields.artifact_retention,
+    ].join(" "),
+  };
 }
 
 async function runSafe(args) {
@@ -253,6 +395,7 @@ async function inspect(args) {
       profile: {
         profile_id: baseReport.triage_config?.profile_id,
         threshold_overrides: baseReport.triage_config?.threshold_overrides ?? {},
+        discovery_intent: baseReport.discovery_intent ?? baseReport.triage_config?.discovery_intent,
       },
     });
     if (fetchArchives) {
@@ -306,6 +449,7 @@ async function profile(args) {
     const trustedSeedLists = splitArg(readArg(args, "--trusted-seed-lists", ""));
     const thresholdOverrides = readJsonArg(args, "--threshold-overrides", {});
     const maxCandidates = readLimit(readArg(args, "--max-candidates", "50"));
+    const intent = readArg(args, "--intent", null);
     const profileModel = createSearchProfile({
       name,
       languages,
@@ -315,6 +459,7 @@ async function profile(args) {
       trusted_seed_lists: trustedSeedLists,
       threshold_overrides: thresholdOverrides,
       max_candidates: maxCandidates,
+      discovery_intent: intent ?? undefined,
     });
     const saved = await saveSearchProfile(profileModel);
     console.log(JSON.stringify({ ...saved.profile, path: saved.path }, null, 2));
@@ -373,7 +518,7 @@ async function workflow(args) {
   const policy = defaultPolicy("metadata_only");
   const report = await buildProfileReport({ policy, profile: profileModel });
   const shortlist = exportShortlist(report, { limit: 10 });
-  const summary = renderCodexSummary(report);
+  const summary = renderAgentSummary(report, profileModel);
   const nextActions = createNextActions(report);
 
   await mkdir(outDir, { recursive: true });
@@ -381,8 +526,10 @@ async function workflow(args) {
   await writeFile(join(outDir, "scout_report.md"), renderMarkdownReport(report), "utf8");
   await writeFile(join(outDir, "scout_report.json"), JSON.stringify(report, null, 2), "utf8");
   await writeFile(join(outDir, "scout_shortlist.md"), shortlist, "utf8");
+  await writeFile(join(outDir, "agent_summary.md"), summary, "utf8");
   await writeFile(join(outDir, "codex_summary.md"), summary, "utf8");
   await writeFile(join(outDir, "next_actions.json"), JSON.stringify(nextActions, null, 2), "utf8");
+  await writeFile(join(outDir, "handoff_package.json"), JSON.stringify(exportHandoffPackages(report), null, 2), "utf8");
   console.log(`Scout workflow artifacts written to ${outDir}`);
   return 0;
 }
@@ -589,13 +736,15 @@ function determineRunStatus({ candidates, collectionErrors, queryCount }) {
   return "partial";
 }
 
-function renderCodexSummary(report) {
+function renderAgentSummary(report, profile = null) {
   const recommended = report.decisions.filter((decision) => ["GREEN", "YELLOW"].includes(decision.verdict));
   const unknown = report.decisions.filter((decision) => decision.verdict === "GRAY");
   const dropped = report.decisions.filter((decision) => decision.verdict === "RED");
+  const discoveryIntent = report.discovery_intent ?? resolveDiscoveryIntent(profile);
   return [
-    "# Codex Scout Summary",
+    "# Scout Agent Summary",
     "",
+    `Discovery intent: ${discoveryIntent}`,
     `Run status: ${report.run_status}`,
     `Recommended: ${recommended.length}`,
     `Unknown: ${unknown.length}`,
@@ -605,9 +754,16 @@ function renderCodexSummary(report) {
     "",
     "## Next Safe Step",
     recommended.length > 0
-      ? "Review the shortlist manually and choose candidates for static inspection or direct human review."
+      ? discoveryIntent === "rewarded"
+        ? "Review reward signals and income summaries manually before pursuing payout."
+        : "Review the shortlist manually and choose candidates for static inspection or direct human review."
       : "Review collection errors and broaden or adjust the profile before rerunning Scout.",
   ].join("\n");
+}
+
+/** @deprecated Use renderAgentSummary */
+function renderCodexSummary(report, profile = null) {
+  return renderAgentSummary(report, profile);
 }
 
 function createNextActions(report) {
@@ -620,9 +776,9 @@ function createNextActions(report) {
 }
 
 function printHelp() {
-  console.log(`Scout Release 2
+  console.log(`Scout Release 3
 
-Codex-facing backend commands:
+Agent-facing CLI commands:
   scout run --safe --limit 50 --out scout_report.md
   scout discover --mode metadata_only --limit 50 --out scout_report.md --json-out scout_report.json
   scout inspect --report scout_report.json --manifest manifest.json --out scout_static_report.md --json-out scout_static_report.json
@@ -630,17 +786,25 @@ Codex-facing backend commands:
   scout validate-report --report scout_report.json
   scout explain --candidate-id SCOUT-0001 --report scout_report.json
   scout export-shortlist --report scout_report.json --limit 25 --out scout_shortlist.md
-  scout profile create beginner-python-ts --languages Python,TypeScript --trusted-seed-lists starter-pack --threshold-overrides '{"green_min_score":40}'
+  scout profile create beginner-python-ts --intent beginner --languages Python,TypeScript --trusted-seed-lists default
+  scout profile create rewarded-typescript --intent rewarded --languages TypeScript --trusted-seed-lists rewarded-programs
   scout profile run beginner-python-ts --out scout_report.md
   scout monitor --profile beginner-python-ts --out scout_watch_report.md
   scout workflow run --profile beginner-python-ts --out-dir scout_session
+  scout cockpit --report scout_report.json --out scout_cockpit.md --json-out scout_cockpit.json
+  scout plan install-dry-run --report scout_static_report.json --candidate-id SCOUT-0001 --contract network_contract.json
+  scout plan network-design --report scout_static_report.json --candidate-id SCOUT-0001 --out scout_network_design.md
+  scout handoff --report scout_report.json --json-out handoff_package.json
   scout probe doctor --json-out scout_probe_doctor.json
   scout probe --report scout_static_report.json --candidate-id SCOUT-0001 --approval-id APPROVAL-123 --network none --command-set readonly --out scout_probe_report.md --json-out scout_probe_report.json
+  scout probe --report scout_static_report.json --candidate-id SCOUT-0001 --approval-id "<R2D approval phrase>" --network registry_allowlist --command-set install_probe --contract network_contract.json
   scout test-policy
 
 Top-level --help is available; subcommand-specific --help is not implemented.
-Release 2 probe is approval-bound, Docker-backed, no-network, readonly, one candidate at a time, and uses local Docker images only.
-Scout still denies clone, installs, repo scripts, GitHub writes, issue claiming, forks, branches, PRs, and issue-to-patch workflows.`);
+Discovery intents: beginner (learning-focused) | rewarded (income/bounty metadata).
+Release 3 adds registry-allowlisted install/test probes with R2D approval phrases and egress logging.
+Readonly probes remain approval-bound, Docker-backed, no-network, one candidate at a time, and use local Docker images only.
+Scout still denies clone, installs without approval contract, repo scripts, GitHub writes, issue claiming, forks, branches, PRs, and issue-to-patch workflows.`);
 }
 
 await loadEnv(process.cwd());

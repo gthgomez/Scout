@@ -4,7 +4,7 @@ const LIFECYCLE_POLICIES = Object.freeze([
   "scripts_audited_allowlist",
   "unsupported_fail_closed",
 ]);
-const COMMAND_SETS = Object.freeze(["readonly", "install_probe_design", "test_probe_design"]);
+const COMMAND_SETS = Object.freeze(["readonly", "install_probe_design", "test_probe_design", "install_probe", "test_probe"]);
 const EGRESS_DECISIONS = Object.freeze(["allowed", "denied", "observed"]);
 const HOST_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$/;
 
@@ -93,6 +93,32 @@ export function renderNetworkDesignReportSection(contract) {
     "",
     "Runtime guard: `probe` must continue rejecting `registry_allowlist` until a later approved implementation consumes this contract.",
   ].join("\n");
+}
+
+export function createEgressLogRecord({ candidateId, networkPolicy, approvedHosts, observedHost, decision, commandId, reason }) {
+  return validateEgressLogRecord({
+    event_id: `egress-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+    timestamp: new Date().toISOString(),
+    candidate_id: candidateId,
+    network_policy: networkPolicy,
+    approved_hosts: approvedHosts,
+    observed_host: observedHost,
+    decision,
+    command_id: commandId,
+    reason,
+  });
+}
+
+export function evaluateEgressHost(observedHost, approvedHosts) {
+  const normalized = String(observedHost ?? "").toLowerCase();
+  const approved = new Set((approvedHosts ?? []).map((host) => String(host).toLowerCase()));
+  if (!normalized) {
+    return { decision: "denied", reason: "Missing observed host." };
+  }
+  if (approved.has(normalized)) {
+    return { decision: "allowed", reason: "Host matched approved registry allowlist." };
+  }
+  return { decision: "denied", reason: `Host ${normalized} is outside approved registry allowlist.` };
 }
 
 export function validateEgressLogRecord(record) {

@@ -1,5 +1,5 @@
 {
-  "id": "default",
+  "seed_list_id": "default",
   "name": "Default trusted seed list",
   "repos": [
     "facebook/react",
