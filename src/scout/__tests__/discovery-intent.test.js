@@ -7,6 +7,7 @@ import { extractRewardSignals } from "../discovery.js";
 import { createSearchProfile, presetDefaults, resolveDiscoveryIntent } from "../profiles.js";
 import { loadTrustedSeedList } from "../seed-lists.js";
 import { buildIncomeSummary, triageCandidate } from "../triage.js";
+import { createReportModel } from "../report.js";
 import { validateSearchProfile } from "../validators.js";
 
 const fixturesPath = join(dirname(fileURLToPath(import.meta.url)), "fixtures");
@@ -101,6 +102,44 @@ describe("intent-aware triage", () => {
     assert.equal(withoutSignal.verdict, "GRAY");
     assert.ok(withoutSignal.gap_codes.includes("REWARD_GAP"));
     assert.ok((withSignal.score ?? 0) > (withoutSignal.score ?? 0));
+  });
+
+  it("keeps inferred-only rewarded candidates at YELLOW, not GREEN", () => {
+    const inferredOnly = triageCandidate(
+      {
+        ...candidateFixtures.greenCandidate,
+        has_verified_reward_signal: false,
+        has_inferred_reward_signal: true,
+        reward_signals: [{ kind: "keyword", value: "reward", confidence: "INFERRED", source_ref: "issue_body" }],
+        source_observations: [{ kind: "reward_signal", value: "keyword:reward", confidence: "INFERRED" }],
+      },
+      { profile: { discovery_intent: "rewarded" }, now: NOW },
+    );
+    assert.equal(inferredOnly.verdict, "YELLOW");
+    assert.ok(inferredOnly.gap_codes.includes("REWARD_GAP"));
+  });
+
+  it("preserves discovery_intent from triage_config when profile is absent", () => {
+    const report = createReportModel({
+      triage_config: {
+        profile_id: "profile-rewarded-typescript",
+        discovery_intent: "rewarded",
+        threshold_overrides: {},
+        effective_thresholds: {
+          green_min_score: 30,
+          max_issue_age_days: 365,
+          recent_repo_activity_days: 90,
+          recent_maintainer_activity_days: 180,
+          min_issue_title_length: 12,
+          max_estimated_files_touched: 5,
+        },
+      },
+      candidates: [],
+      decisions: [],
+      evidence: [],
+    });
+    assert.equal(report.discovery_intent, "rewarded");
+    assert.equal(report.triage_config.discovery_intent, "rewarded");
   });
 
   it("adds income_summary for rewarded decisions with signals", () => {

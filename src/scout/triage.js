@@ -263,7 +263,9 @@ export function triageCandidate(candidate, options = {}) {
   const stale = daysSince(candidate.updated_at, now) > triageConfig.effective_thresholds.max_issue_age_days;
   const partial = candidate.collection_status !== "OBSERVED";
   const setupDocumented = hasPositiveSetupDocs(candidate);
-  const hasRewardSignal = candidate.has_verified_reward_signal || candidate.has_inferred_reward_signal;
+  const hasVerifiedReward = candidate.has_verified_reward_signal === true;
+  const hasInferredReward = candidate.has_inferred_reward_signal === true;
+  const hasRewardSignal = hasVerifiedReward || hasInferredReward;
 
   let verdict;
   let gapCodes;
@@ -280,10 +282,15 @@ export function triageCandidate(candidate, options = {}) {
     gapCodes = ["REWARD_GAP"];
     riskSummary = "No reward or bounty signal detected in GitHub metadata.";
     humanNextAction = "Review manually or broaden rewarded discovery queries before pursuing.";
+  } else if (triageConfig.discovery_intent === "rewarded" && !hasVerifiedReward) {
+    verdict = "YELLOW";
+    gapCodes = ["REWARD_GAP"];
+    riskSummary = "Only inferred reward signal; verified bounty label or title payout is required for GREEN.";
+    humanNextAction = "Confirm payout terms manually before pursuing; inferred body keywords are not sufficient.";
   } else if (triageConfig.discovery_intent === "rewarded") {
     verdict = stale || score.score < greenMinScore ? "YELLOW" : "GREEN";
     gapCodes = [];
-    riskSummary = incomeSummary ?? "Reward signal detected; payout not verified by Scout.";
+    riskSummary = incomeSummary ?? "Verified reward signal detected; payout not verified by Scout.";
     humanNextAction = verdict === "GREEN" ? "Review reward terms manually before pursuing payout." : "Gather more reward clarity before pursuing.";
   } else {
     verdict = stale || !setupDocumented || score.score < greenMinScore ? "YELLOW" : "GREEN";

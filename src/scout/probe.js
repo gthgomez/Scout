@@ -707,6 +707,11 @@ function createSandboxRun({ sandbox, plan, status, cleanupStatus, destroyedAt = 
 function commandAttemptFromResult({ candidateId, command, approvalId, sandbox, startedAt, result, commandSet = "readonly" }) {
   const endedAt = new Date().toISOString();
   const status = result.result === "passed" ? "passed" : result.result === "timeout" ? "failed" : "failed";
+  const sourceRefBySet = {
+    readonly: "Scout readonly command allowlist",
+    install_probe: "Scout install_probe argv plan",
+    test_probe: "Scout test_probe argv plan",
+  };
   return {
     command_id: result.command_id,
     candidate_id: candidateId,
@@ -716,7 +721,7 @@ function commandAttemptFromResult({ candidateId, command, approvalId, sandbox, s
     observed_at: endedAt,
     approval_id: approvalId,
     sandbox_id: sandbox.sandbox_id,
-    source_ref: "Scout readonly command allowlist",
+    source_ref: sourceRefBySet[commandSet] ?? "Scout probe command plan",
     command_set: commandSet,
     started_at: startedAt,
     ended_at: endedAt,

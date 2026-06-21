@@ -429,6 +429,7 @@ async function inspect(args) {
       audit_events: [...baseReport.audit_events, ...auditLog.all()],
       monitor_events: baseReport.monitor_events,
       command_attempts: baseReport.command_attempts,
+      discovery_intent: baseReport.discovery_intent ?? baseReport.triage_config?.discovery_intent,
       triage_config: baseReport.triage_config,
     });
   }
@@ -498,6 +499,8 @@ async function monitor(args) {
     audit_events: current.audit_events,
     monitor_events: monitorEvents,
     command_attempts: current.command_attempts,
+    profile: profileModel,
+    discovery_intent: current.discovery_intent ?? resolveDiscoveryIntent(profileModel),
     triage_config: current.triage_config,
   });
   await saveMonitorSnapshot(profileName, report);
@@ -759,11 +762,6 @@ function renderAgentSummary(report, profile = null) {
         : "Review the shortlist manually and choose candidates for static inspection or direct human review."
       : "Review collection errors and broaden or adjust the profile before rerunning Scout.",
   ].join("\n");
-}
-
-/** @deprecated Use renderAgentSummary */
-function renderCodexSummary(report, profile = null) {
-  return renderAgentSummary(report, profile);
 }
 
 function createNextActions(report) {

@@ -2,6 +2,13 @@
 
 ## [0.2.0] — Release 3 (R3)
 
+### Fixes (post-audit)
+- Honest R3B egress documentation: command-inferred allowlist checks, not packet-level enforcement
+- Propagate `discovery_intent` through monitor, inspect, and triage config merge paths
+- Rewarded GREEN requires verified reward signal (label or title payout); inferred-only stays YELLOW
+- Curated `rewarded-programs` seed list (removed platform meta-repo entries)
+- `package.json` version aligned with release notes
+
 ### R3.0 — Dual discovery intents + agent-agnostic harness
 - Added `discovery_intent` (`beginner` | `rewarded`) on search profiles with backward-compatible default `beginner`
 - Presets: `beginner-python-ts`, `rewarded-typescript`

@@ -344,7 +344,7 @@ describe("report CLI commands", () => {
     }
   });
 
-  it("writes Codex-facing workflow artifacts", () => {
+  it("writes agent workflow artifacts", () => {
     const dir = mkdtempSync(join(tmpdir(), "scout-workflow-"));
     const profileDir = join(dir, ".scout", "profiles");
     const outDir = join(dir, "session");

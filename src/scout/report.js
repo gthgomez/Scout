@@ -21,13 +21,15 @@ export function createReportModel({
   triage_config = undefined,
   discovery_intent = undefined,
 }) {
-  const resolvedIntent = discovery_intent ?? resolveDiscoveryIntent(profile);
+  const resolvedIntent =
+    discovery_intent ?? resolveDiscoveryIntent(profile) ?? triage_config?.discovery_intent ?? "beginner";
   return validateReportModel({
     generated_at: new Date().toISOString(),
     discovery_intent: resolvedIntent,
     run_status,
     runtime_safety_status:
-      runtime_safety_status ?? "Release 1: no clone, no install, no repo scripts, no GitHub writes, no dynamic probes.",
+      runtime_safety_status ??
+      "No unapproved clone, package install, repo script, GitHub write, or dynamic probe was attempted in this report.",
     triage_config: createTriageConfig(profile, triage_config),
     collection_errors,
     candidates,
@@ -46,6 +48,7 @@ function createTriageConfig(profile, triageConfig) {
   if (triageConfig) {
     return resolveTriageConfig({
       profile_id: triageConfig.profile_id ?? profile?.profile_id,
+      discovery_intent: triageConfig.discovery_intent ?? profile?.discovery_intent,
       threshold_overrides: triageConfig.threshold_overrides ?? profile?.threshold_overrides ?? {},
     });
   }

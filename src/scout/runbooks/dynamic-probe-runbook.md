@@ -18,5 +18,6 @@ Run approval-bound Docker probes after static inspection evidence exists.
 
 ## Safety stops
 - One candidate per probe command.
-- Registry egress is logged and non-allowlisted hosts are blocked.
+- Registry allowlist checks infer hostname from planned argv before execution; commands outside the approved list are blocked pre-execution.
+- Docker sandboxes use bridge networking; Scout does not enforce packet-level egress filtering or observe runtime traffic.
 - Lifecycle-script risk without an approved lifecycle policy fails closed.

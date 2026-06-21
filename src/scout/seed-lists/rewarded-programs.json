@@ -3,10 +3,6 @@
   "name": "Rewarded contribution programs",
   "repos": [
     {
-      "repo": "algora-io/algora",
-      "labels": ["bounty", "reward"]
-    },
-    {
       "repo": "calcom/cal.com",
       "labels": ["bounty", "reward"]
     },
@@ -23,15 +19,23 @@
       "labels": ["bounty", "reward"]
     },
     {
-      "repo": "supabase/supabase",
-      "labels": ["bounty", "sponsor"]
-    },
-    {
       "repo": "payloadcms/payload",
       "labels": ["bounty", "reward"]
     },
     {
       "repo": "directus/directus",
+      "labels": ["bounty", "reward"]
+    },
+    {
+      "repo": "formbricks/formbricks",
+      "labels": ["bounty", "reward"]
+    },
+    {
+      "repo": "hoppscotch/hoppscotch",
+      "labels": ["bounty", "reward"]
+    },
+    {
+      "repo": "dubinc/dub",
       "labels": ["bounty", "reward"]
     }
   ]

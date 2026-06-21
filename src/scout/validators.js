@@ -147,6 +147,9 @@ export function validateTriageConfig(config) {
   assertString(config.profile_id, "ScoutReport.triage_config.profile_id");
   assertObject(config.threshold_overrides, "ScoutReport.triage_config.threshold_overrides");
   assertObject(config.effective_thresholds, "ScoutReport.triage_config.effective_thresholds");
+  if (config.discovery_intent !== undefined) {
+    assertEnum(config.discovery_intent, DISCOVERY_INTENTS, "ScoutReport.triage_config.discovery_intent");
+  }
   resolveThresholds(config.threshold_overrides);
   resolveThresholds(config.effective_thresholds);
   return config;

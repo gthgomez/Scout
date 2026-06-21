@@ -53,11 +53,13 @@ Profiles without `discovery_intent` default to `beginner`.
 ## Release 3 Probe Extensions
 
 - `registry_allowlist` network policy with R2D approval phrase validation
-- Executable `install_probe` command set (egress-logged)
+- Executable `install_probe` and `test_probe` command sets (pre-command egress logging)
 - `test_probe` gated on successful `install_probe` evidence
 - `scout plan install-dry-run` and `scout plan network-design` CLI wiring
 
 Readonly `--network none --command-set readonly` probes remain the default safe path.
+
+**Egress honesty:** `registry_allowlist` probes infer registry hostnames from planned argv and block commands whose inferred host is outside the approved list. Docker sandboxes use bridge networking; Scout does not enforce packet-level egress filtering or monitor runtime traffic.
 
 ## Policy Boundary
 

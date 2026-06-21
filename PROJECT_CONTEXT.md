@@ -43,7 +43,8 @@ Regardless of harness:
 
 - No unapproved `git clone`, package install, repo script execution, or GitHub writes
 - Reward metadata is inferred from GitHub only; Scout does not verify payout
-- Registry install/test probes require R2D approval phrases and egress logging
+- Registry install/test probes require R2D approval phrases and pre-command egress logging
+- Docker `registry_allowlist` probes use bridge networking; Scout does not enforce packet-level egress filtering
 
 ## Key CLI Additions (R3)
 
