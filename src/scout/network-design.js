@@ -4,9 +4,16 @@ const LIFECYCLE_POLICIES = Object.freeze([
   "scripts_audited_allowlist",
   "unsupported_fail_closed",
 ]);
-const COMMAND_SETS = Object.freeze(["readonly", "install_probe_design", "test_probe_design"]);
+const COMMAND_SETS = Object.freeze(["readonly", "install_probe_design", "test_probe_design", "install_probe", "test_probe"]);
 const EGRESS_DECISIONS = Object.freeze(["allowed", "denied", "observed"]);
 const HOST_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$/;
+const DESIGN_ONLY_COMMAND_SETS = Object.freeze(new Set(["install_probe_design", "test_probe_design"]));
+
+const EGRESS_HONESTY_NOTE = [
+  "Egress limitation: Scout infers registry hostnames from planned argv and records egress log entries before each command.",
+  "Docker sandboxes use bridge networking; Scout does not enforce packet-level egress filtering or observe runtime traffic.",
+  "Commands whose inferred registry host is outside the approved list are blocked pre-execution.",
+].join(" ");
 
 export function validateNetworkExpansionContract(contract) {
   assertObject(contract, "NetworkExpansionContract");
@@ -52,12 +59,19 @@ export function validateNetworkExpansionContract(contract) {
   };
 }
 
+export function isDesignOnlyCommandSet(commandSet) {
+  return DESIGN_ONLY_COMMAND_SETS.has(commandSet);
+}
+
 export function renderNetworkApprovalText(contract) {
   const validated = validateNetworkExpansionContract(contract);
+  const designOnly = isDesignOnlyCommandSet(validated.command_set);
   return [
-    "Scout R2D network expansion is design-only. This approval text is not executable in the current CLI.",
+    designOnly
+      ? "Scout R2D network expansion dry-run plan. This approval text is not executable in the CLI."
+      : "Scout R2D network expansion approval for executable `scout probe`.",
     "",
-    "Exact future approval phrase:",
+    "Exact approval phrase:",
     validated.approval_phrase,
     "",
     `Candidate: ${validated.candidate_id}`,
@@ -70,16 +84,23 @@ export function renderNetworkApprovalText(contract) {
     `Timeout: ${validated.timeout_seconds}s`,
     `Artifact retention: ${validated.artifact_retention}`,
     "",
-    "Current boundary: Scout still supports only --network none --command-set readonly at runtime.",
+    designOnly
+      ? "Use `scout plan install-dry-run` or `scout plan network-design` for planning only."
+      : `Use \`scout probe --network registry_allowlist --command-set ${validated.command_set}\` with this contract and exact approval phrase.`,
+    "",
+    EGRESS_HONESTY_NOTE,
   ].join("\n");
 }
 
 export function renderNetworkDesignReportSection(contract) {
   const validated = validateNetworkExpansionContract(contract);
+  const designOnly = isDesignOnlyCommandSet(validated.command_set);
   return [
-    "## R2D Network Expansion Design",
+    designOnly ? "## R2D Network Expansion Design" : "## R2D Network Expansion (executable probe)",
     "",
-    "Status: design-only; no package install, repo test, registry network, or GitHub write execution is implemented.",
+    designOnly
+      ? "Status: dry-run planning only; no package install or test execution."
+      : "Status: executable via `scout probe` when approval phrase and contract JSON match.",
     "",
     `- Candidate: ${validated.candidate_id}`,
     `- Repo: ${validated.repo}`,
@@ -91,8 +112,34 @@ export function renderNetworkDesignReportSection(contract) {
     `- Timeout: ${validated.timeout_seconds}s`,
     `- Artifact retention: ${validated.artifact_retention}`,
     "",
-    "Runtime guard: `probe` must continue rejecting `registry_allowlist` until a later approved implementation consumes this contract.",
+    EGRESS_HONESTY_NOTE,
   ].join("\n");
+}
+
+export function createEgressLogRecord({ candidateId, networkPolicy, approvedHosts, observedHost, decision, commandId, reason }) {
+  return validateEgressLogRecord({
+    event_id: `egress-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+    timestamp: new Date().toISOString(),
+    candidate_id: candidateId,
+    network_policy: networkPolicy,
+    approved_hosts: approvedHosts,
+    observed_host: observedHost,
+    decision,
+    command_id: commandId,
+    reason,
+  });
+}
+
+export function evaluateEgressHost(observedHost, approvedHosts) {
+  const normalized = String(observedHost ?? "").toLowerCase();
+  const approved = new Set((approvedHosts ?? []).map((host) => String(host).toLowerCase()));
+  if (!normalized) {
+    return { decision: "denied", reason: "Missing observed host." };
+  }
+  if (approved.has(normalized)) {
+    return { decision: "allowed", reason: "Host matched approved registry allowlist." };
+  }
+  return { decision: "denied", reason: `Host ${normalized} is outside approved registry allowlist.` };
 }
 
 export function validateEgressLogRecord(record) {

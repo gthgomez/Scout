@@ -187,6 +187,33 @@ describe("discovery mapping", () => {
     assert.ok(auditLog.all().some((event) => event.decision === "observed" && event.reason.includes("4999/5000")));
   });
 
+  it("uses a GitHub token from the environment when one is present", async () => {
+    const previousToken = process.env.GITHUB_TOKEN;
+    process.env.GITHUB_TOKEN = "test-token";
+    const seenHeaders = [];
+    try {
+      await discoverCandidates({
+        policy: defaultPolicy("metadata_only"),
+        queries: ["query"],
+        limit: 1,
+        enrich: false,
+        fetchImpl: async (_url, init = {}) => {
+          seenHeaders.push(init.headers);
+          return okJson({ items: [] });
+        },
+      });
+    } finally {
+      if (previousToken === undefined) {
+        delete process.env.GITHUB_TOKEN;
+      } else {
+        process.env.GITHUB_TOKEN = previousToken;
+      }
+    }
+
+    assert.equal(seenHeaders[0].Authorization, "Bearer test-token");
+    assert.equal(seenHeaders[0].Accept, "application/vnd.github+json");
+  });
+
   it("retains partial candidates when enrichment metadata fails", async () => {
     const fetchImpl = async (url) => {
       if (String(url).includes("/search/issues")) {

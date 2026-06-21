@@ -70,7 +70,7 @@ describe("R2G decision cockpit reports", () => {
     const model = createDecisionCockpitModel(reportFixtures.validReport);
     const output = renderDecisionCockpitSection(model);
 
-    assert.ok(output.includes("## R2G Decision Cockpit"));
+    assert.ok(output.includes("## Scout Decision Cockpit"));
     assert.ok(output.includes("Confidence:"));
     assert.ok(output.includes("Why not GREEN:"));
     assert.ok(output.includes("Handoff evidence IDs:"));

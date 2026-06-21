@@ -43,7 +43,10 @@ export const GAP_CODES = Object.freeze([
   "TEST_GAP",
   "ROLLBACK_GAP",
   "MONITORING_GAP",
+  "REWARD_GAP",
 ]);
+
+export const DISCOVERY_INTENTS = Object.freeze(["beginner", "rewarded"]);
 
 export const OPERATIONS = Object.freeze([
   "github_search_read",

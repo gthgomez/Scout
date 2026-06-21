@@ -1,4 +1,5 @@
 import {
+  DISCOVERY_INTENTS,
   GAP_CODES,
   MODES,
   RUN_STATUSES,
@@ -110,6 +111,9 @@ export function validateTriageDecision(decision) {
   assertEnum(decision.setup_status, SETUP_STATUSES, "TriageDecision.setup_status");
   assertString(decision.abandon_criteria, "TriageDecision.abandon_criteria");
   assertString(decision.human_next_action, "TriageDecision.human_next_action");
+  if (decision.income_summary !== undefined && decision.income_summary !== null) {
+    assertString(decision.income_summary, "TriageDecision.income_summary");
+  }
   if (decision.verdict === "RED" && !decision.drop_reason) {
     throw new Error("TriageDecision.drop_reason is required for RED verdicts");
   }
@@ -122,6 +126,8 @@ export function validateSearchProfile(profile) {
     assertString(profile[field], `SearchProfile.${field}`),
   );
   assertEnum(profile.mode, MODES.slice(0, 2), "SearchProfile.mode");
+  const discoveryIntent = profile.discovery_intent ?? "beginner";
+  assertEnum(discoveryIntent, DISCOVERY_INTENTS, "SearchProfile.discovery_intent");
   ["languages", "labels", "include_queries", "exclude_orgs", "exclude_repos", "trusted_seed_lists"].forEach((field) =>
     assertArray(profile[field], `SearchProfile.${field}`),
   );
@@ -133,7 +139,7 @@ export function validateSearchProfile(profile) {
     assertObject(profile.threshold_overrides, "SearchProfile.threshold_overrides");
     resolveThresholds(profile.threshold_overrides);
   }
-  return profile;
+  return { ...profile, discovery_intent: discoveryIntent };
 }
 
 export function validateTriageConfig(config) {
@@ -141,6 +147,9 @@ export function validateTriageConfig(config) {
   assertString(config.profile_id, "ScoutReport.triage_config.profile_id");
   assertObject(config.threshold_overrides, "ScoutReport.triage_config.threshold_overrides");
   assertObject(config.effective_thresholds, "ScoutReport.triage_config.effective_thresholds");
+  if (config.discovery_intent !== undefined) {
+    assertEnum(config.discovery_intent, DISCOVERY_INTENTS, "ScoutReport.triage_config.discovery_intent");
+  }
   resolveThresholds(config.threshold_overrides);
   resolveThresholds(config.effective_thresholds);
   return config;
@@ -187,7 +196,18 @@ export function validateAuditEvent(event) {
 export function validateSandboxPolicy(policy) {
   assertObject(policy, "SandboxPolicy");
   assertString(policy.image, "SandboxPolicy.image");
-  assertEnum(policy.network, ["none"], "SandboxPolicy.network");
+  assertEnum(policy.network, ["none", "registry_allowlist"], "SandboxPolicy.network");
+  if (policy.network === "registry_allowlist") {
+    assertArray(policy.registry_hosts, "SandboxPolicy.registry_hosts");
+    if (policy.registry_hosts.length === 0) {
+      throw new Error("SandboxPolicy.registry_hosts must not be empty when network is registry_allowlist");
+    }
+    policy.registry_hosts.forEach((host, index) => {
+      if (typeof host !== "string" || host.length === 0) {
+        throw new Error(`SandboxPolicy.registry_hosts[${index}] must be a non-empty string`);
+      }
+    });
+  }
   assertFiniteInteger(policy.timeout_seconds, "SandboxPolicy.timeout_seconds", { min: 1 });
   assertFiniteInteger(policy.cpu_count, "SandboxPolicy.cpu_count", { min: 1 });
   assertFiniteInteger(policy.memory_mb, "SandboxPolicy.memory_mb", { min: 1 });
@@ -213,8 +233,8 @@ export function validateProbePlan(plan) {
   ["plan_id", "candidate_id", "approval_id", "command_set", "network_policy", "created_at"].forEach((field) =>
     assertString(plan[field], `ProbePlan.${field}`),
   );
-  assertEnum(plan.network_policy, ["none"], "ProbePlan.network_policy");
-  assertEnum(plan.command_set, ["readonly"], "ProbePlan.command_set");
+  assertEnum(plan.network_policy, ["none", "registry_allowlist"], "ProbePlan.network_policy");
+  assertEnum(plan.command_set, ["readonly", "install_probe", "test_probe"], "ProbePlan.command_set");
   validateSandboxPolicy(plan.sandbox_policy);
   assertArray(plan.source_refs, "ProbePlan.source_refs");
   assertArray(plan.commands, "ProbePlan.commands");
@@ -241,7 +261,7 @@ export function validateSandboxRun(run) {
   );
   assertOptionalString(run.destroyed_at, "SandboxRun.destroyed_at");
   assertOptionalString(run.image_digest, "SandboxRun.image_digest");
-  assertEnum(run.network_policy, ["none"], "SandboxRun.network_policy");
+  assertEnum(run.network_policy, ["none", "registry_allowlist"], "SandboxRun.network_policy");
   assertObject(run.resource_limits, "SandboxRun.resource_limits");
   assertFiniteInteger(run.resource_limits.timeout_seconds, "SandboxRun.resource_limits.timeout_seconds", { min: 1 });
   assertFiniteInteger(run.resource_limits.cpu_count, "SandboxRun.resource_limits.cpu_count", { min: 1 });
@@ -305,10 +325,10 @@ export function validateReportModel(report) {
       }
     });
     if (report.probe_config.command_set !== undefined) {
-      assertEnum(report.probe_config.command_set, ["readonly"], "ScoutReport.probe_config.command_set");
+      assertEnum(report.probe_config.command_set, ["readonly", "install_probe", "test_probe"], "ScoutReport.probe_config.command_set");
     }
     if (report.probe_config.network_policy !== undefined) {
-      assertEnum(report.probe_config.network_policy, ["none"], "ScoutReport.probe_config.network_policy");
+      assertEnum(report.probe_config.network_policy, ["none", "registry_allowlist"], "ScoutReport.probe_config.network_policy");
     }
     if (report.probe_config.sandbox_policy !== undefined) {
       validateSandboxPolicy(report.probe_config.sandbox_policy);

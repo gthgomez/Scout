@@ -64,23 +64,44 @@ describe("R2D network expansion design contracts", () => {
     const output = renderNetworkApprovalText(validContract());
 
     assert.ok(output.includes("SCOUT-alpha-green-1"));
-    assert.ok(output.includes("acme/tooling"));
-    assert.ok(output.includes("https://github.com/acme/tooling/issues/12"));
-    assert.ok(output.includes("registry_allowlist"));
-    assert.ok(output.includes("registry.npmjs.org, pypi.org, files.pythonhosted.org"));
+    assert.ok(output.includes("dry-run plan"));
     assert.ok(output.includes("install_probe_design"));
-    assert.ok(output.includes("scripts_disabled"));
-    assert.ok(output.includes("120s"));
-    assert.ok(output.includes("retain_stdout_stderr_7_days"));
-    assert.ok(output.includes("design-only"));
+    assert.ok(output.includes("bridge networking"));
+  });
+
+  it("renders executable approval text for install_probe contracts", () => {
+    const output = renderNetworkApprovalText(
+      validContract({
+        command_set: "install_probe",
+        approval_phrase:
+          "APPROVE SCOUT R2D SCOUT-alpha-green-1 acme/tooling https://github.com/acme/tooling/issues/12 registry_allowlist registry.npmjs.org pypi.org files.pythonhosted.org install_probe scripts_disabled 120 retain_stdout_stderr_7_days",
+      }),
+    );
+
+    assert.ok(output.includes("executable `scout probe`"));
+    assert.ok(output.includes("install_probe"));
+    assert.ok(output.includes("bridge networking"));
+    assert.ok(!output.includes("readonly at runtime"));
   });
 
   it("renders a design report section without implying execution", () => {
     const output = renderNetworkDesignReportSection(validContract());
 
-    assert.ok(output.includes("Status: design-only"));
-    assert.ok(output.includes("no package install"));
-    assert.ok(output.includes("Runtime guard"));
+    assert.ok(output.includes("dry-run planning only"));
+    assert.ok(output.includes("bridge networking"));
+  });
+
+  it("renders an executable report section for install_probe contracts", () => {
+    const output = renderNetworkDesignReportSection(
+      validContract({
+        command_set: "install_probe",
+        approval_phrase:
+          "APPROVE SCOUT R2D SCOUT-alpha-green-1 acme/tooling https://github.com/acme/tooling/issues/12 registry_allowlist registry.npmjs.org pypi.org files.pythonhosted.org install_probe scripts_disabled 120 retain_stdout_stderr_7_days",
+      }),
+    );
+
+    assert.ok(output.includes("executable via `scout probe`"));
+    assert.ok(!output.includes("rejecting `registry_allowlist`"));
   });
 
   it("validates future egress log records", () => {

@@ -1,5 +1,6 @@
 import { validateReportModel } from "./validators.js";
 import { resolveTriageConfig } from "./triage.js";
+import { resolveDiscoveryIntent } from "./profiles.js";
 
 const VERDICT_ORDER = Object.freeze({ GREEN: 0, YELLOW: 1, GRAY: 2, RED: 3 });
 
@@ -18,12 +19,17 @@ export function createReportModel({
   runtime_safety_status = undefined,
   profile = undefined,
   triage_config = undefined,
+  discovery_intent = undefined,
 }) {
+  const resolvedIntent =
+    discovery_intent ?? profile?.discovery_intent ?? triage_config?.discovery_intent ?? "beginner";
   return validateReportModel({
     generated_at: new Date().toISOString(),
+    discovery_intent: resolvedIntent,
     run_status,
     runtime_safety_status:
-      runtime_safety_status ?? "Release 1: no clone, no install, no repo scripts, no GitHub writes, no dynamic probes.",
+      runtime_safety_status ??
+      "No unapproved clone, package install, repo script, GitHub write, or dynamic probe was attempted in this report.",
     triage_config: createTriageConfig(profile, triage_config),
     collection_errors,
     candidates,
@@ -42,6 +48,7 @@ function createTriageConfig(profile, triageConfig) {
   if (triageConfig) {
     return resolveTriageConfig({
       profile_id: triageConfig.profile_id ?? profile?.profile_id,
+      discovery_intent: triageConfig.discovery_intent ?? profile?.discovery_intent,
       threshold_overrides: triageConfig.threshold_overrides ?? profile?.threshold_overrides ?? {},
     });
   }
@@ -53,6 +60,8 @@ export function renderMarkdownReport(report) {
   const recommended = report.decisions.filter((decision) => ["GREEN", "YELLOW"].includes(decision.verdict));
   const dropped = report.decisions.filter((decision) => decision.verdict === "RED");
   const unknown = report.decisions.filter((decision) => decision.verdict === "GRAY");
+  const discoveryIntent = report.discovery_intent ?? "beginner";
+  const intentLabel = discoveryIntent === "rewarded" ? "Rewarded contribution hunt" : "Beginner contribution hunt";
 
   return [
     "# Scout Report",
@@ -60,6 +69,8 @@ export function renderMarkdownReport(report) {
     "## Executive Verdict",
     "",
     `Generated: ${report.generated_at}`,
+    `Discovery intent: ${discoveryIntent}`,
+    `Mission: ${intentLabel}`,
     `Run status: ${report.run_status}`,
     "",
     `Recommended candidates: ${recommended.length}`,
@@ -78,7 +89,7 @@ export function renderMarkdownReport(report) {
     "",
     "## Recommended Issues",
     "",
-    renderRecommendedTable(recommended, report.candidates, report.evidence),
+    renderRecommendedTable(recommended, report.candidates, report.evidence, discoveryIntent),
     "",
     "## Dropped Candidates",
     "",
@@ -222,24 +233,51 @@ export function exportShortlist(report, options = {}) {
 
   const byId = candidateById(report.candidates);
 
-  const lines = ["# Scout Shortlist", "", `Generated: ${new Date().toISOString()}`, "", `Candidates: ${shortlist.length}`, ""];
+  const discoveryIntent = report.discovery_intent ?? report.decisions[0]?.discovery_intent ?? "beginner";
+  const lines = ["# Scout Shortlist", "", `Generated: ${new Date().toISOString()}`, "", `Discovery intent: ${discoveryIntent}`, "", `Candidates: ${shortlist.length}`, ""];
 
   if (shortlist.length === 0) {
     lines.push("No shortlist candidates after filtering.");
     return lines.join("\n");
   }
 
-  lines.push(
-    "| Rank | Verdict | Repo | Issue | Score | Portfolio | Risk | Setup | Next Action |",
-    "| ---: | --- | --- | --- | ---: | ---: | --- | --- | --- |",
-  );
-  for (const decision of shortlist) {
-    const candidate = byId.get(decision.candidate_id);
+  if (discoveryIntent === "rewarded") {
     lines.push(
-      `| ${decision.rank ?? ""} | ${decision.verdict} | ${candidate?.repo_owner ?? "unknown"}/${candidate?.repo_name ?? "unknown"} | ${escapeCell(candidate?.issue_title ?? decision.candidate_id)} | ${decision.score ?? ""} | ${decision.portfolio_score ?? ""} | ${escapeCell(decision.risk_summary ?? "")} | ${decision.setup_status} | ${escapeCell(decision.human_next_action ?? "")} |`,
+      "| Rank | Verdict | Repo | Issue | Score | Reward Signal | Income Summary | Risk | Next Action |",
+      "| ---: | --- | --- | --- | ---: | --- | --- | --- | --- |",
     );
+    for (const decision of shortlist) {
+      const candidate = byId.get(decision.candidate_id);
+      const rewardSignal = formatRewardSignal(candidate);
+      lines.push(
+        `| ${decision.rank ?? ""} | ${decision.verdict} | ${candidate?.repo_owner ?? "unknown"}/${candidate?.repo_name ?? "unknown"} | ${escapeCell(candidate?.issue_title ?? decision.candidate_id)} | ${decision.score ?? ""} | ${escapeCell(rewardSignal)} | ${escapeCell(decision.income_summary ?? "")} | ${escapeCell(decision.risk_summary ?? "")} | ${escapeCell(decision.human_next_action ?? "")} |`,
+      );
+    }
+  } else {
+    lines.push(
+      "| Rank | Verdict | Repo | Issue | Score | Portfolio | Risk | Setup | Next Action |",
+      "| ---: | --- | --- | --- | ---: | ---: | --- | --- | --- |",
+    );
+    for (const decision of shortlist) {
+      const candidate = byId.get(decision.candidate_id);
+      lines.push(
+        `| ${decision.rank ?? ""} | ${decision.verdict} | ${candidate?.repo_owner ?? "unknown"}/${candidate?.repo_name ?? "unknown"} | ${escapeCell(candidate?.issue_title ?? decision.candidate_id)} | ${decision.score ?? ""} | ${decision.portfolio_score ?? ""} | ${escapeCell(decision.risk_summary ?? "")} | ${decision.setup_status} | ${escapeCell(decision.human_next_action ?? "")} |`,
+      );
+    }
   }
   return lines.join("\n");
+}
+
+function formatRewardSignal(candidate) {
+  if (!candidate) return "none";
+  if (candidate.has_verified_reward_signal) {
+    return (candidate.reward_signals ?? [])
+      .filter((signal) => signal.confidence === "OBSERVED")
+      .map((signal) => signal.value)
+      .join(", ") || "verified";
+  }
+  if (candidate.has_inferred_reward_signal) return "inferred";
+  return "none";
 }
 
 function candidateById(candidates) {
@@ -254,9 +292,24 @@ function shortlistDecisions(decisions) {
   });
 }
 
-function renderRecommendedTable(decisions, candidates, evidence) {
+function renderRecommendedTable(decisions, candidates, evidence, discoveryIntent = "beginner") {
   const byId = candidateById(candidates);
   const evidenceByCandidateId = evidenceIdsByCandidate(evidence);
+  if (discoveryIntent === "rewarded") {
+    const rows = [
+      "| Rank | Verdict | Repo | Stack | Issue | Link | Score | Reward Signal | Income Summary | Risk | Evidence IDs | Human Next Action |",
+      "| ---: | --- | --- | --- | --- | --- | ---: | --- | --- | --- | --- | --- |",
+    ];
+    for (const decision of decisions) {
+      const candidate = byId.get(decision.candidate_id);
+      const evidenceIds = evidenceByCandidateId.get(decision.candidate_id) ?? [];
+      rows.push(
+        `| ${decision.rank ?? ""} | ${decision.verdict} | ${candidate?.repo_owner}/${candidate?.repo_name} | ${candidate?.primary_language ?? "unknown"} | ${escapeCell(candidate?.issue_title ?? decision.candidate_id)} | ${candidate?.issue_url ?? ""} | ${decision.score ?? ""} | ${escapeCell(formatRewardSignal(candidate))} | ${escapeCell(decision.income_summary ?? "")} | ${escapeCell(decision.risk_summary)} | ${escapeCell(evidenceIds.join(", "))} | ${escapeCell(decision.human_next_action)} |`,
+      );
+    }
+    return rows.join("\n");
+  }
+
   const rows = [
     "| Rank | Verdict | Repo | Stack | Issue | Link | Score | Portfolio | Risk | Setup Status | Evidence IDs | Human Next Action |",
     "| ---: | --- | --- | --- | --- | --- | ---: | ---: | --- | --- | --- | --- |",

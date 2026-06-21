@@ -12,6 +12,12 @@ import {
   validateArchiveManifestEntries,
 } from "./static-inspection.js";
 import { validateProbePlan, validateSandboxPolicy, validateSandboxRun } from "./validators.js";
+import { createInstallProbeDryRunPlan, createTestProbeDesignPlan } from "./install-probe-dry-run.js";
+import {
+  createEgressLogRecord,
+  evaluateEgressHost,
+  validateNetworkExpansionContract,
+} from "./network-design.js";
 
 const MAX_DURATION_SECONDS = 120;
 const DEFAULT_DURATION_SECONDS = 60;
@@ -32,8 +38,8 @@ export const DEFAULT_SANDBOX_POLICY = Object.freeze({
   mounts: [],
 });
 
-export const SUPPORTED_NETWORK_POLICIES = Object.freeze(["none"]);
-export const SUPPORTED_COMMAND_SETS = Object.freeze(["readonly"]);
+export const SUPPORTED_NETWORK_POLICIES = Object.freeze(["none", "registry_allowlist"]);
+export const SUPPORTED_COMMAND_SETS = Object.freeze(["readonly", "install_probe", "test_probe"]);
 
 export function createSandboxPolicy(options = {}) {
   const timeout = Number(options.max_duration_seconds ?? options.timeout_seconds ?? DEFAULT_DURATION_SECONDS);
@@ -43,6 +49,7 @@ export function createSandboxPolicy(options = {}) {
     network: options.network ?? DEFAULT_SANDBOX_POLICY.network,
     timeout_seconds: Math.min(Math.max(Number.isInteger(timeout) && timeout > 0 ? timeout : DEFAULT_DURATION_SECONDS, 1), MAX_DURATION_SECONDS),
     mounts: [],
+    registry_hosts: options.registry_hosts ?? [],
   };
   delete policy.max_duration_seconds;
   return validateSandboxPolicy(policy);
@@ -56,15 +63,16 @@ export function createProbePlan({
   commandSet = "readonly",
   maxDurationSeconds = DEFAULT_DURATION_SECONDS,
   sandboxPolicy = undefined,
+  networkContract = null,
 }) {
   if (!approvalId || typeof approvalId !== "string") {
     throw new Error("probe requires --approval-id before sandbox planning.");
   }
   if (!SUPPORTED_NETWORK_POLICIES.includes(network)) {
-    throw new Error(`Unsupported probe network policy: ${network}. Release 2 initially supports only network none.`);
+    throw new Error(`Unsupported probe network policy: ${network}. Supported policies: ${SUPPORTED_NETWORK_POLICIES.join(", ")}.`);
   }
   if (!SUPPORTED_COMMAND_SETS.includes(commandSet)) {
-    throw new Error(`Unsupported probe command set: ${commandSet}. Release 2 initially supports only readonly.`);
+    throw new Error(`Unsupported probe command set: ${commandSet}. Supported command sets: ${SUPPORTED_COMMAND_SETS.join(", ")}.`);
   }
   const candidate = report?.candidates?.find((item) => item.candidate_id === candidateId);
   if (!candidate) {
@@ -74,12 +82,55 @@ export function createProbePlan({
     throw new Error(`Candidate ${candidateId} must have static inspection evidence before dynamic probing.`);
   }
 
-  const commands = readonlyCommandsForCandidate(candidate);
-  const deniedCommands = deniedCommandsFromStaticObservations(candidate);
+  let commands = [];
+  let deniedCommands = [];
+  let registryHosts = [];
+  let validatedContract = null;
+
+  if (commandSet === "readonly") {
+    if (network !== "none") {
+      throw new Error("readonly probes require network none.");
+    }
+    commands = readonlyCommandsForCandidate(candidate);
+    deniedCommands = deniedCommandsFromStaticObservations(candidate);
+  } else if (commandSet === "install_probe") {
+    if (network !== "registry_allowlist") {
+      throw new Error("install_probe requires network registry_allowlist.");
+    }
+    validatedContract = assertInstallProbeApproval({ networkContract, approvalId, candidate, commandSet: "install_probe" });
+    const installPlan = createInstallProbeDryRunPlan(report, candidateId, validatedContract);
+    if (installPlan.status !== "planned") {
+      throw new Error(installPlan.reason ?? "Install probe plan failed closed.");
+    }
+    commands = installPlan.proposed_argv;
+    deniedCommands = installPlan.denied_commands ?? [];
+    registryHosts = validatedContract.registry_hosts;
+  } else if (commandSet === "test_probe") {
+    if (network !== "registry_allowlist") {
+      throw new Error("test_probe requires network registry_allowlist.");
+    }
+    if (!hasInstallProbeEvidence(report, candidateId)) {
+      throw new Error(`Candidate ${candidateId} requires successful install_probe evidence before test_probe execution.`);
+    }
+    validatedContract = assertInstallProbeApproval({ networkContract, approvalId, candidate, commandSet: "test_probe" });
+    const installPlan = createInstallProbeDryRunPlan(report, candidateId, {
+      ...validatedContract,
+      command_set: "install_probe",
+    });
+    const testPlan = createTestProbeDesignPlan(report, candidateId, installPlan);
+    if (testPlan.status === "unsupported_fail_closed" || testPlan.proposed_argv.length === 0) {
+      throw new Error(testPlan.reason ?? "Test probe plan failed closed.");
+    }
+    commands = testPlan.proposed_argv;
+    deniedCommands = deniedCommandsFromStaticObservations(candidate);
+    registryHosts = validatedContract.registry_hosts;
+  }
+
   const setupIntelligence = setupIntelligenceFromCandidate(candidate);
   const policy = createSandboxPolicy({
     ...(sandboxPolicy ?? {}),
     network,
+    registry_hosts: registryHosts,
     timeout_seconds: maxDurationSeconds,
   });
   return validateProbePlan({
@@ -94,6 +145,9 @@ export function createProbePlan({
         type: "github_archive",
         ref: buildGitHubArchiveUrl(candidate),
       },
+      ...(validatedContract
+        ? [{ type: "network_expansion_contract", ref: validatedContract.contract_id ?? validatedContract.approval_phrase }]
+        : []),
     ],
     commands,
     denied_commands: deniedCommands,
@@ -114,6 +168,7 @@ export async function runProbe({
   maxDurationSeconds = DEFAULT_DURATION_SECONDS,
   policy = defaultPolicy("dynamic_probe"),
   sourceDir = null,
+  networkContract = null,
 }) {
   const plan = createProbePlan({
     report,
@@ -122,6 +177,7 @@ export async function runProbe({
     network,
     commandSet,
     maxDurationSeconds,
+    networkContract,
   });
   assertSandboxLifecycleAllowed(policy, approvalId);
 
@@ -138,8 +194,9 @@ export async function runProbe({
 
   const sandboxRuns = [];
   const commandAttempts = [];
+  const egressLogs = [];
   let sandbox = null;
-  let cleanupStatus = "not_started";
+  let cleanupStatus;
   try {
     sandbox = await runner.createSandbox(plan.sandbox_policy);
     sandboxRuns.push(createSandboxRun({ sandbox, plan, status: "created", cleanupStatus: "pending" }));
@@ -147,6 +204,38 @@ export async function runProbe({
     await runner.stageSource({ sandbox, sourceDir: stagedSourceDir });
     for (const command of plan.commands) {
       const startedAt = new Date().toISOString();
+      if (plan.network_policy === "registry_allowlist") {
+        const observedHost = inferRegistryHostFromCommand(command, plan.sandbox_policy.registry_hosts ?? []);
+        const egressDecision = evaluateEgressHost(observedHost, plan.sandbox_policy.registry_hosts ?? []);
+        const egressLog = createEgressLogRecord({
+          candidateId,
+          networkPolicy: plan.network_policy,
+          approvedHosts: plan.sandbox_policy.registry_hosts ?? [],
+          observedHost,
+          decision: egressDecision.decision,
+          commandId: `cmd-${sanitizeId(command.join("-"))}`,
+          reason: egressDecision.reason,
+        });
+        egressLogs.push(egressLog);
+        if (egressDecision.decision !== "allowed") {
+          commandAttempts.push({
+            command_id: egressLog.command_id,
+            candidate_id: candidateId,
+            command,
+            status: "blocked",
+            reason: egressDecision.reason,
+            observed_at: new Date().toISOString(),
+            approval_id: approvalId,
+            sandbox_id: sandbox.sandbox_id,
+            source_ref: "registry egress allowlist",
+            command_set: plan.command_set,
+            started_at: startedAt,
+            ended_at: new Date().toISOString(),
+            result: "blocked",
+          });
+          continue;
+        }
+      }
       const result = await runner.runCommand({
         sandbox,
         command,
@@ -161,6 +250,7 @@ export async function runProbe({
         sandbox,
         startedAt,
         result,
+        commandSet: plan.command_set,
       }));
     }
   } finally {
@@ -207,10 +297,13 @@ export async function runProbe({
     ...report,
     generated_at: new Date().toISOString(),
     runtime_safety_status:
-      "Release 2: Docker-backed dynamic probing is probe-only, no-network, readonly, approval-bound, and still denies installs, repo scripts, GitHub writes, and coding workflows.",
+      plan.command_set === "readonly"
+        ? "Release 2: Docker-backed dynamic probing is probe-only, no-network, readonly, approval-bound, and still denies installs, repo scripts, GitHub writes, and coding workflows."
+        : "Release 3: Registry-allowlisted install/test probes are approval-bound, egress-logged, and still deny GitHub writes and coding workflows.",
     evidence: [...(report.evidence ?? []), ...evidence],
     command_attempts: [...(report.command_attempts ?? []), ...commandAttempts],
     sandbox_runs: [...(report.sandbox_runs ?? []), ...sandboxRuns.map(validateSandboxRun)],
+    egress_logs: [...(report.egress_logs ?? []), ...egressLogs],
     probe_config: {
       approval_id: approvalId,
       candidate_id: candidateId,
@@ -328,13 +421,22 @@ export class DockerSandboxRunner {
 export function validateDockerPolicy(policy) {
   validateSandboxPolicy(policy);
   const failures = [];
-  if (policy.network !== "none") failures.push("network must be none");
-  if (policy.allow_host_home !== false) failures.push("host home mounts are blocked");
-  if (policy.allow_ssh_agent !== false) failures.push("SSH agent forwarding is blocked");
-  if (policy.allow_credential_helper !== false) failures.push("credential helpers are blocked");
-  if (policy.allow_docker_socket !== false) failures.push("Docker socket mounts are blocked");
-  if (policy.inherit_host_env !== false) failures.push("host environment inheritance is blocked");
-  if (Array.isArray(policy.mounts) && policy.mounts.length > 0) failures.push("custom host mounts are blocked");
+  if (policy.network === "none") {
+    if (policy.allow_host_home !== false) failures.push("host home mounts are blocked");
+    if (policy.allow_ssh_agent !== false) failures.push("SSH agent forwarding is blocked");
+    if (policy.allow_credential_helper !== false) failures.push("credential helpers are blocked");
+    if (policy.allow_docker_socket !== false) failures.push("Docker socket mounts are blocked");
+    if (policy.inherit_host_env !== false) failures.push("host environment inheritance is blocked");
+    if (Array.isArray(policy.mounts) && policy.mounts.length > 0) failures.push("custom host mounts are blocked");
+  } else if (policy.network === "registry_allowlist") {
+    if (!Array.isArray(policy.registry_hosts) || policy.registry_hosts.length === 0) {
+      failures.push("registry_hosts are required for registry_allowlist");
+    }
+    if (policy.allow_docker_socket !== false) failures.push("Docker socket mounts are blocked");
+    if (Array.isArray(policy.mounts) && policy.mounts.length > 0) failures.push("custom host mounts are blocked");
+  } else {
+    failures.push("network must be none or registry_allowlist");
+  }
   if (failures.length > 0) {
     throw new Error(`Docker sandbox policy is unsafe: ${failures.join("; ")}.`);
   }
@@ -342,13 +444,14 @@ export function validateDockerPolicy(policy) {
 }
 
 export function buildDockerRunArgs({ policy, sourceDir, command }) {
-  return [
+  const networkArg = policy.network === "registry_allowlist" ? "bridge" : "none";
+  const args = [
     "run",
     "--rm",
     "--pull",
     "never",
     "--network",
-    "none",
+    networkArg,
     "--cpus",
     String(policy.cpu_count),
     "--memory",
@@ -369,6 +472,48 @@ export function buildDockerRunArgs({ policy, sourceDir, command }) {
     policy.image,
     ...command.slice(1),
   ];
+  return args;
+}
+
+export function hasInstallProbeEvidence(report, candidateId) {
+  return (report?.command_attempts ?? []).some(
+    (attempt) =>
+      attempt.candidate_id === candidateId &&
+      attempt.command_set === "install_probe" &&
+      attempt.status === "passed" &&
+      (attempt.exit_code === undefined || attempt.exit_code === 0),
+  );
+}
+
+function assertInstallProbeApproval({ networkContract, approvalId, candidate, commandSet }) {
+  if (!networkContract || typeof networkContract !== "object") {
+    throw new Error(`${commandSet} requires a validated R2D network expansion contract.`);
+  }
+  const validated = validateNetworkExpansionContract({
+    ...networkContract,
+    command_set: commandSet,
+    candidate_id: networkContract.candidate_id ?? candidate.candidate_id,
+    repo: networkContract.repo ?? `${candidate.repo_owner}/${candidate.repo_name}`,
+    issue: networkContract.issue ?? candidate.issue_url,
+  });
+  if (approvalId !== validated.approval_phrase) {
+    throw new Error("Approval phrase does not match the R2D network expansion contract.");
+  }
+  return validated;
+}
+
+function inferRegistryHostFromCommand(command, approvedHosts) {
+  const joined = Array.isArray(command) ? command.join(" ").toLowerCase() : String(command).toLowerCase();
+  for (const host of approvedHosts ?? []) {
+    if (joined.includes(String(host).toLowerCase())) {
+      return host;
+    }
+  }
+  if (/\bnpm\b/.test(joined)) return "registry.npmjs.org";
+  if (/\b(pip|poetry)\b/.test(joined)) return "pypi.org";
+  if (/\byarn\b/.test(joined)) return "registry.yarnpkg.com";
+  if (/\bpnpm\b/.test(joined)) return "registry.npmjs.org";
+  return approvedHosts?.[0] ?? "unknown.registry";
 }
 
 export async function probeDoctor({ image = DEFAULT_SANDBOX_POLICY.image, commandRunner = runHostCommand } = {}) {
@@ -559,9 +704,14 @@ function createSandboxRun({ sandbox, plan, status, cleanupStatus, destroyedAt = 
   };
 }
 
-function commandAttemptFromResult({ candidateId, command, approvalId, sandbox, startedAt, result }) {
+function commandAttemptFromResult({ candidateId, command, approvalId, sandbox, startedAt, result, commandSet = "readonly" }) {
   const endedAt = new Date().toISOString();
   const status = result.result === "passed" ? "passed" : result.result === "timeout" ? "failed" : "failed";
+  const sourceRefBySet = {
+    readonly: "Scout readonly command allowlist",
+    install_probe: "Scout install_probe argv plan",
+    test_probe: "Scout test_probe argv plan",
+  };
   return {
     command_id: result.command_id,
     candidate_id: candidateId,
@@ -571,7 +721,8 @@ function commandAttemptFromResult({ candidateId, command, approvalId, sandbox, s
     observed_at: endedAt,
     approval_id: approvalId,
     sandbox_id: sandbox.sandbox_id,
-    source_ref: "Scout readonly command allowlist",
+    source_ref: sourceRefBySet[commandSet] ?? "Scout probe command plan",
+    command_set: commandSet,
     started_at: startedAt,
     ended_at: endedAt,
     duration_ms: result.duration_ms,

@@ -1,0 +1,16 @@
+{
+  "seed_list_id": "default",
+  "name": "Default trusted seed list",
+  "repos": [
+    "facebook/react",
+    "microsoft/vscode",
+    "microsoft/TypeScript",
+    "nodejs/node",
+    "python/cpython",
+    "rust-lang/rust",
+    "golang/go",
+    "kubernetes/kubernetes",
+    "tensorflow/tensorflow",
+    "home-assistant/core"
+  ]
+}

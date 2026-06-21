@@ -1,30 +1,69 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { DISCOVERY_INTENTS } from "./types.js";
 import { normalizeSeedRepo } from "./seed-lists.js";
 import { validateSearchProfile } from "./validators.js";
 
+export const PROFILE_PRESETS = Object.freeze({
+  "beginner-python-ts": {
+    discovery_intent: "beginner",
+    languages: ["Python", "TypeScript"],
+    labels: ["good first issue", "help wanted", "documentation"],
+    trusted_seed_lists: ["default"],
+    include_queries: [],
+  },
+  "rewarded-typescript": {
+    discovery_intent: "rewarded",
+    languages: ["TypeScript"],
+    labels: ["bounty", "reward", "sponsor"],
+    trusted_seed_lists: ["rewarded-programs"],
+    include_queries: [
+      "is:issue state:open label:bounty no:assignee language:TypeScript",
+      "is:issue state:open label:reward no:assignee language:TypeScript",
+      'is:issue state:open "bounty" in:title no:assignee language:TypeScript',
+      'is:issue state:open "paid" in:title no:assignee language:TypeScript',
+      "is:issue state:open label:sponsor no:assignee language:TypeScript",
+    ],
+  },
+});
+
+export function isProfilePreset(name) {
+  return Object.hasOwn(PROFILE_PRESETS, name);
+}
+
+export function presetDefaults(name) {
+  return PROFILE_PRESETS[name] ?? {};
+}
+
+export function resolveDiscoveryIntent(profile) {
+  return profile?.discovery_intent ?? "beginner";
+}
+
 export function createSearchProfile({
   name,
-  languages = ["Python", "TypeScript"],
-  labels = ["good first issue", "help wanted", "documentation"],
-  include_queries = [],
+  languages,
+  labels,
+  include_queries,
   exclude_orgs = [],
   exclude_repos = [],
-  trusted_seed_lists = [],
+  trusted_seed_lists,
   max_candidates = 50,
   mode = "metadata_only",
   threshold_overrides = {},
+  discovery_intent,
 }) {
+  const preset = presetDefaults(name);
   const now = new Date().toISOString();
   return validateSearchProfile({
     profile_id: `profile-${name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}`,
     name,
-    languages,
-    labels,
-    include_queries,
+    discovery_intent: discovery_intent ?? preset.discovery_intent ?? "beginner",
+    languages: languages ?? preset.languages ?? ["Python", "TypeScript"],
+    labels: labels ?? preset.labels ?? ["good first issue", "help wanted", "documentation"],
+    include_queries: include_queries ?? preset.include_queries ?? [],
     exclude_orgs,
     exclude_repos,
-    trusted_seed_lists,
+    trusted_seed_lists: trusted_seed_lists ?? preset.trusted_seed_lists ?? [],
     max_candidates,
     mode,
     threshold_overrides,
@@ -142,3 +181,5 @@ export async function loadSearchProfile(name, options = {}) {
   const raw = await readFile(path, "utf8");
   return validateSearchProfile(JSON.parse(raw));
 }
+
+export { DISCOVERY_INTENTS };

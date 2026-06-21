@@ -1,18 +1,26 @@
 {
   "name": "scout",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
-  "description": "Codex-driven, policy-enforced open-source contribution discovery tool.",
+  "description": "Policy-enforced, agent-agnostic open-source contribution discovery tool for AI agent harnesses.",
   "bin": {
     "scout": "./src/scout/cli.js"
   },
   "scripts": {
     "test": "node --test \"src/scout/__tests__/*.test.js\"",
+    "test:adversarial": "node --test \"src/scout/__tests__/adversarial-eval.test.js\"",
     "test:policy": "node --test \"src/scout/__tests__/policy.test.js\"",
-    "check": "node --check src/scout/cli.js"
+    "check": "node scripts/check-syntax.js",
+    "lint": "eslint src/",
+    "lint:fix": "eslint --fix src/",
+    "ci": "npm run check && npm test && npm run test:adversarial && npm run lint"
   },
   "engines": {
     "node": ">=20"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.5.0"
   }
 }

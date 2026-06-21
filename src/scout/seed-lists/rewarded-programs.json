@@ -1,0 +1,42 @@
+{
+  "seed_list_id": "rewarded-programs",
+  "name": "Rewarded contribution programs",
+  "repos": [
+    {
+      "repo": "calcom/cal.com",
+      "labels": ["bounty", "reward"]
+    },
+    {
+      "repo": "appwrite/appwrite",
+      "labels": ["bounty", "reward"]
+    },
+    {
+      "repo": "n8n-io/n8n",
+      "labels": ["bounty", "reward"]
+    },
+    {
+      "repo": "medusajs/medusa",
+      "labels": ["bounty", "reward"]
+    },
+    {
+      "repo": "payloadcms/payload",
+      "labels": ["bounty", "reward"]
+    },
+    {
+      "repo": "directus/directus",
+      "labels": ["bounty", "reward"]
+    },
+    {
+      "repo": "formbricks/formbricks",
+      "labels": ["bounty", "reward"]
+    },
+    {
+      "repo": "hoppscotch/hoppscotch",
+      "labels": ["bounty", "reward"]
+    },
+    {
+      "repo": "dubinc/dub",
+      "labels": ["bounty", "reward"]
+    }
+  ]
+}
