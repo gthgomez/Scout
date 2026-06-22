@@ -10,7 +10,8 @@ export const PROFILE_PRESETS = Object.freeze({
     languages: ["Python", "TypeScript"],
     labels: ["good first issue", "help wanted", "documentation"],
     trusted_seed_lists: ["beginner-small"],
-    include_queries: [],
+    include_queries: ["is:issue state:open label:\"good first issue\" stars:<500 no:assignee"],
+    repo_size_filter: "stars:<500",
   },
   "beginner-docs-only": {
     discovery_intent: "beginner",

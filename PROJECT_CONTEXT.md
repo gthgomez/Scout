@@ -4,7 +4,9 @@
 
 Scout is a policy-enforced backend for finding open-source contribution candidates. It is orchestrated by AI agent harnesses through runbooks and CLI artifacts — not tied to a single vendor runtime.
 
-Current release: **0.3.2** on `main`.
+Policy gates **Scout CLI operations** only; harnesses must follow runbooks for allowed/denied actions outside Scout.
+
+Current release: **0.3.3** on `main`.
 
 ## Discovery Intents
 
@@ -17,23 +19,33 @@ Current release: **0.3.2** on `main`.
 
 | Variable | Purpose |
 | --- | --- |
-| `GITHUB_TOKEN` / `GH_TOKEN` | GitHub API access |
+| `GITHUB_TOKEN` / `GH_TOKEN` | GitHub API access; enables default `full` workflow preset |
 | `SCOUT_SANDBOX_IMAGE` | Docker probe image override |
 | `SCOUT_GITHUB_CONCURRENCY` | Enrichment parallelism (default 4) |
 | `SCOUT_ENRICH_MODE` | `auto`, `rest`, or `graphql` |
 | `SCOUT_CACHE_TTL_SEARCH` | Search cache TTL seconds (default 86400) |
 | `SCOUT_CACHE_TTL_METADATA` | Metadata cache TTL seconds (default 21600) |
 
+## Workflow Presets
+
+| Preset | Stages | Default when |
+| --- | --- | --- |
+| `fast` | discover → cockpit → handoff | No GitHub token |
+| `full` | discover → static (archive) → cockpit → handoff | `GITHUB_TOKEN` or `GH_TOKEN` present |
+
+CLI: `--workflow-preset fast|full`, `--fetch-archives`, `--static-limit N` (defaults to `--shortlist-limit`).
+
 ## Agent Artifact Contract
 
-`scout workflow run --through discover,cockpit,handoff` writes a session bundle including:
+`scout workflow run` writes a session bundle including:
 
-- `scout_session.json` — session manifest with `stages_completed`
+- `scout_session.json` — manifest with `stages_completed`, `workflow_preset_*`, `static_fetch_archives`
 - `scout_report.json` / `scout_report.md`
-- `handoff_package.json` — **schema 1.1** primary agent entrypoint
+- `scout_static_report.json` when static stage runs with archive fetch
+- `handoff_package.json` — **schema 1.1** primary agent entrypoint (`handoff_mode`, `recommended_packages`)
 - `scout_cockpit.json` when cockpit stage runs
 
-Handoff 1.1 adds `recommended_packages`, `suggested_commands`, `schema_version`.
+Handoff 1.1 adds `handoff_mode` (`metadata_only` | `static_verified`), `recommended_packages`, `suggested_commands`, `schema_version`.
 
 See [`AGENTS.md`](AGENTS.md) for harness routing.
 
@@ -41,7 +53,7 @@ See [`AGENTS.md`](AGENTS.md) for harness routing.
 
 | Command | Role |
 | --- | --- |
-| `scout workflow run --through ...` | Multi-stage pipeline |
+| `scout workflow run [--workflow-preset fast\|full]` | Multi-stage pipeline with token-aware default |
 | `scout workflow resume --session ...` | Continue incomplete session |
 | `scout discover` / `profile run` | Discovery with `--no-cache`, `--enrich-mode` |
 | `scout monitor --skip-known --notify` | Incremental watch (exit 1 on actionable events) |
@@ -62,6 +74,7 @@ See [`AGENTS.md`](AGENTS.md) for harness routing.
 | `scripts/benchmark-discovery.ps1` | Discovery mode benchmark |
 | `scripts/monitor.ps1` | Scheduled monitor example |
 | `AGENTS.md` | Harness routing |
+| `.github/workflows/ci-selfhosted.yml` | Self-hosted Windows CI |
 
 ## Verification
 
@@ -69,9 +82,10 @@ See [`AGENTS.md`](AGENTS.md) for harness routing.
 npm run ci
 ```
 
-Includes `test:policy`. No GitHub Actions CI.
+Includes `test:policy`. GitHub Actions CI runs on the self-hosted Windows runner only.
 
 ## Open Gaps
 
 - Remove `codex_summary.md` in 0.4.0
+- JSON Schema validation for handoff/report in 0.4.0
 - OpenClaw/Slack notifications (deferred)

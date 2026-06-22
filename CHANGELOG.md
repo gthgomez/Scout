@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.3.3] — Workflow presets + handoff honesty
+
+### Added
+- Workflow presets: `fast` (`discover,cockpit,handoff`) and `full` (`discover,static,cockpit,handoff`)
+- `--workflow-preset fast|full`, `--fetch-archives`, `--static-limit` on `scout workflow run`
+- Token-aware default: `GITHUB_TOKEN`/`GH_TOKEN` present → `full`; otherwise `fast` with warning when `full` requested without token
+- Real static workflow stage: shortlist-scoped `inspectCandidateStaticArchive`, per-candidate failure tolerance, re-triage
+- Session manifest fields: `workflow_preset_requested`, `workflow_preset_effective`, `static_fetch_archives`
+- Handoff `handoff_mode` (`metadata_only` | `static_verified`), preset-aware `recommended_packages` gating
+- `has_observed_reward_metadata` alias on reward metadata exports
+- Fast-preset cockpit metadata-only banner when static evidence is low
+- `beginner-python-ts` preset: `stars:<500` filter
+- Self-hosted CI only (removed GitHub-hosted `ci.yml` to avoid cloud runner minutes)
+- Runbooks index: `src/scout/runbooks/README.md`
+
+### Changed
+- `suggested_commands` use session-relative `--report` paths with optional `cwd`
+- `scout test-policy` runs policy test suite instead of stub message
+- Docs: accurate CI story, workflow preset tables, policy scope honesty (Scout CLI vs harness)
+- Dockerfile label aligned to `0.3.3`
+- Probe runbook: argv-inferred registry check wording
+
+### Deferred (0.4.0)
+- `codex_summary.md` removal
+- JSON Schema for `handoff_package.json` / `scout_report.json`
+
 ## [0.3.2] — Profiles + incremental monitor
 
 ### Added
