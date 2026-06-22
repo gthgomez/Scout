@@ -92,10 +92,9 @@ Canonical local verification:
 npm run ci
 ```
 
-GitHub Actions:
+GitHub Actions (self-hosted only — no cloud runner minutes):
 
-- [`.github/workflows/ci.yml`](.github/workflows/ci.yml) — Linux `ubuntu-latest`, runs `npm run ci`
-- [`.github/workflows/ci-selfhosted.yml`](.github/workflows/ci-selfhosted.yml) — self-hosted Windows runner for workspace-specific checks
+- [`.github/workflows/ci-selfhosted.yml`](.github/workflows/ci-selfhosted.yml) — local Windows runner (`self-hosted`, `windows`), runs `scripts/ci.ps1`
 
 ## Deferred
 

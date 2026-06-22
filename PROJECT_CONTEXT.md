@@ -74,7 +74,7 @@ See [`AGENTS.md`](AGENTS.md) for harness routing.
 | `scripts/benchmark-discovery.ps1` | Discovery mode benchmark |
 | `scripts/monitor.ps1` | Scheduled monitor example |
 | `AGENTS.md` | Harness routing |
-| `.github/workflows/ci.yml` | GitHub-hosted Linux CI |
+| `.github/workflows/ci-selfhosted.yml` | Self-hosted Windows CI |
 
 ## Verification
 
@@ -82,7 +82,7 @@ See [`AGENTS.md`](AGENTS.md) for harness routing.
 npm run ci
 ```
 
-Includes `test:policy`. GitHub Actions CI runs on `ubuntu-latest` and self-hosted Windows.
+Includes `test:policy`. GitHub Actions CI runs on the self-hosted Windows runner only.
 
 ## Open Gaps
 

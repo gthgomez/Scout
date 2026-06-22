@@ -12,7 +12,7 @@
 - `has_observed_reward_metadata` alias on reward metadata exports
 - Fast-preset cockpit metadata-only banner when static evidence is low
 - `beginner-python-ts` preset: `stars:<500` filter
-- GitHub-hosted Linux CI: `.github/workflows/ci.yml`
+- Self-hosted CI only (removed GitHub-hosted `ci.yml` to avoid cloud runner minutes)
 - Runbooks index: `src/scout/runbooks/README.md`
 
 ### Changed
