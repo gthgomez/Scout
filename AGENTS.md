@@ -8,7 +8,7 @@ Policy gates **Scout CLI operations** (runbook allow/deny lists). Harnesses must
 
 1. Read [`PROJECT_CONTEXT.md`](PROJECT_CONTEXT.md) for CLI surface and policy boundaries.
 2. For coding handoffs, **start from `handoff_package.json`** in the session output directory — do not re-run discovery unless `run_status=failed`.
-3. Check `handoff_mode`: `static_verified` means archive-backed static evidence; `metadata_only` needs explicit static follow-up before coding.
+3. Check `handoff_mode`: `static_verified` means at least one shortlist candidate has archive-backed static evidence; `metadata_only` (read `handoff_mode_reason`) needs explicit static follow-up before coding even if full preset ran.
 4. Use runbooks under [`src/scout/runbooks/`](src/scout/runbooks/) for stage-specific allowed/denied operations.
 
 ## Handoff Contract (schema 1.1)
@@ -16,7 +16,8 @@ Policy gates **Scout CLI operations** (runbook allow/deny lists). Harnesses must
 `handoff_package.json` is the primary agent entrypoint:
 
 - `schema_version`: `"1.1"`
-- `handoff_mode`: `"metadata_only"` | `"static_verified"`
+- `handoff_mode`: `"metadata_only"` | `"static_verified"` (outcome-based, not preset intent)
+- `handoff_mode_reason`: set when `metadata_only` — explains skipped static or failed archive fetch
 - `recommended_packages`: preset-filtered GREEN/YELLOW candidate IDs (never RED/GRAY)
 - `suggested_commands`: read-only CLI follow-ups with session-relative `--report` paths
 - `packages[]`: per-candidate evidence IDs, denied actions, and agent notes

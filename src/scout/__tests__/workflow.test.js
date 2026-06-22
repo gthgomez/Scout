@@ -218,6 +218,63 @@ describe("workflow execution", () => {
       const staticReport = JSON.parse(readFileSync(join(outDir, "scout_static_report.json"), "utf8"));
       const failed = staticReport.candidates.find((item) => item.candidate_id === "SCOUT-beta-yellow-2");
       assert.equal(failed.static_inspection_status, "insufficient_static_evidence");
+
+      const handoff = JSON.parse(readFileSync(join(outDir, "handoff_package.json"), "utf8"));
+      assert.equal(handoff.handoff_mode, "static_verified");
+    } finally {
+      rmSync(outDir, { recursive: true, force: true });
+    }
+  });
+
+  it("sets metadata_only handoff when full preset archive fetch yields no static evidence", async () => {
+    const outDir = mkdtempSync(join(tmpdir(), "scout-workflow-static-all-fail-"));
+    try {
+      const report = {
+        ...reportFixtures.validReport,
+        evidence: [
+          {
+            evidence_id: "ev-meta-1",
+            candidate_id: "SCOUT-alpha-green-1",
+            source_ref: "https://github.com/acme/tooling/issues/12",
+            observed_at: "2026-05-30T00:00:00.000Z",
+            claim: "GitHub metadata collected.",
+            supports: "candidate metadata and triage input",
+            source_type: "GITHUB_API",
+            trust_level: "OBSERVED",
+          },
+        ],
+        candidates: reportFixtures.validReport.candidates.map((candidate) => ({
+          ...candidate,
+          source_observations: [],
+          static_inspection_status: "not_inspected",
+        })),
+        profile: { shortlist_verdicts: ["GREEN", "YELLOW", "GRAY"] },
+      };
+
+      const inspectArchive = async ({ candidate }) => ({
+        ...candidate,
+        static_inspection_status: "insufficient_static_evidence",
+        collection_status: "PARTIAL",
+      });
+
+      await executeWorkflow({
+        outDir,
+        profileModel: { name: "test", profile_id: "profile-test", discovery_intent: "beginner" },
+        report,
+        through: "discover,static,handoff",
+        shortlistLimit: 5,
+        workflowPresetRequested: "full",
+        workflowPresetEffective: "full",
+        fetchArchives: true,
+        renderAgentSummary: () => "# summary",
+        createNextActions: () => [],
+        inspectArchive,
+      });
+
+      const handoff = JSON.parse(readFileSync(join(outDir, "handoff_package.json"), "utf8"));
+      assert.equal(handoff.handoff_mode, "metadata_only");
+      assert.ok(handoff.handoff_mode_reason);
+      assert.ok(handoff.handoff_mode_reason.includes("archive fetch"));
     } finally {
       rmSync(outDir, { recursive: true, force: true });
     }

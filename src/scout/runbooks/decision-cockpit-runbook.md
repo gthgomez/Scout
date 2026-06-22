@@ -24,12 +24,16 @@ Review Scout triage output with confidence categories, why-not-GREEN reasoning, 
 ## Workflow
 1. Validate the report schema and decision coverage.
 2. Export the decision cockpit for human or agent review.
-3. Export `handoff_package.json` (schema 1.1) — start here for external coding agents. Read `recommended_packages` and `suggested_commands` first.
-4. For install/test planning, generate R2D network design text and install dry-run plans without executing them unless an approved registry probe is explicitly requested later.
+3. Export `handoff_package.json` (schema 1.1) — start here for external coding agents. Read `recommended_packages`, `handoff_mode`, `workflow_preset`, and `suggested_commands` first.
+4. Check `handoff_mode` before handoff: `static_verified` only when archive fetch ran and at least one shortlist candidate has non-low `static_evidence` confidence; otherwise `metadata_only` (see `handoff_mode_reason`).
+5. Review cockpit confidence categories — especially `static_evidence` — before recommending any package for coding-agent handoff.
+6. For install/test planning, generate R2D network design text and install dry-run plans without executing them unless an approved registry probe is explicitly requested later.
 
 ## Output expectations
 - Cockpit JSON includes confidence categories including `reward_signal` for rewarded profiles.
+- Cockpit markdown may show a **metadata-only handoff warning** when `handoff_mode` is `metadata_only` (fast preset, or full preset with failed/insufficient archive fetch).
 - Handoff packages list evidence IDs, denied actions, suggested first files, and agent notes.
+- `handoff_mode` reflects evidence outcomes, not workflow intent; `workflow_preset` records which preset ran.
 - Rewarded handoffs include `income_summary` and a payout disclaimer.
 
 ## Safety stops
