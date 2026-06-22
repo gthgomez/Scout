@@ -1,6 +1,6 @@
 {
   "name": "scout",
-  "version": "0.2.0",
+  "version": "0.3.2",
   "private": true,
   "type": "module",
   "description": "Policy-enforced, agent-agnostic open-source contribution discovery tool for AI agent harnesses.",
@@ -14,7 +14,7 @@
     "check": "node scripts/check-syntax.js",
     "lint": "eslint src/",
     "lint:fix": "eslint --fix src/",
-    "ci": "npm run check && npm test && npm run test:adversarial && npm run lint"
+    "ci": "npm run check && npm test && npm run test:adversarial && npm run test:policy && npm run lint"
   },
   "engines": {
     "node": ">=20"

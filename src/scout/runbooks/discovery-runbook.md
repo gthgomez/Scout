@@ -31,8 +31,9 @@ Find and shortlist contribution candidates using GitHub metadata only, then hand
 ## Expected Scout CLI backend calls
 Use `scout --help` for the top-level command list. Subcommands do not provide separate `--help` output.
 
-- `scout workflow run --profile <profile-id> --out-dir <dir>`
-  - preferred agent-facing entrypoint; writes `scout_session.json`, `scout_report.md`, `scout_report.json`, `scout_shortlist.md`, `agent_summary.md`, deprecated `codex_summary.md`, `handoff_package.json`, and `next_actions.json`
+- `scout workflow run --profile <profile-id> --out-dir <dir> [--through discover,cockpit,handoff] [--shortlist-limit N]`
+  - preferred agent-facing entrypoint; writes session manifest, reports, handoff schema 1.1
+- `scout workflow resume --session <dir>`
 - `scout profile create beginner-python-ts --intent beginner`
 - `scout profile create rewarded-typescript --intent rewarded --trusted-seed-lists rewarded-programs`
 - `scout run --safe --limit <n> --out <path>`

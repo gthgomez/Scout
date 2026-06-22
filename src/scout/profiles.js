@@ -9,8 +9,23 @@ export const PROFILE_PRESETS = Object.freeze({
     discovery_intent: "beginner",
     languages: ["Python", "TypeScript"],
     labels: ["good first issue", "help wanted", "documentation"],
-    trusted_seed_lists: ["default"],
+    trusted_seed_lists: ["beginner-small"],
     include_queries: [],
+  },
+  "beginner-docs-only": {
+    discovery_intent: "beginner",
+    languages: ["Docs", "Python", "TypeScript"],
+    labels: ["documentation", "docs", "help wanted"],
+    trusted_seed_lists: ["docs-friendly"],
+    include_queries: [],
+  },
+  "beginner-small-repos": {
+    discovery_intent: "beginner",
+    languages: ["TypeScript", "Python"],
+    labels: ["good first issue", "help wanted"],
+    trusted_seed_lists: ["beginner-small"],
+    include_queries: ["is:issue state:open label:\"good first issue\" stars:<500 no:assignee"],
+    repo_size_filter: "stars:<500",
   },
   "rewarded-typescript": {
     discovery_intent: "rewarded",
@@ -23,6 +38,18 @@ export const PROFILE_PRESETS = Object.freeze({
       'is:issue state:open "bounty" in:title no:assignee language:TypeScript',
       'is:issue state:open "paid" in:title no:assignee language:TypeScript',
       "is:issue state:open label:sponsor no:assignee language:TypeScript",
+    ],
+  },
+  "rewarded-verified-only": {
+    discovery_intent: "rewarded",
+    languages: ["TypeScript"],
+    labels: ["bounty", "reward"],
+    trusted_seed_lists: ["rewarded-programs"],
+    require_verified_reward: true,
+    shortlist_verdicts: ["GREEN", "YELLOW"],
+    include_queries: [
+      "is:issue state:open label:bounty no:assignee language:TypeScript",
+      "is:issue state:open label:reward no:assignee language:TypeScript",
     ],
   },
 });
@@ -51,22 +78,32 @@ export function createSearchProfile({
   mode = "metadata_only",
   threshold_overrides = {},
   discovery_intent,
+  require_verified_reward,
+  shortlist_verdicts,
+  repo_size_filter,
 }) {
   const preset = presetDefaults(name);
   const now = new Date().toISOString();
+  const includeQueries = include_queries ?? preset.include_queries ?? [];
+  const sizeFilter = repo_size_filter ?? preset.repo_size_filter;
   return validateSearchProfile({
     profile_id: `profile-${name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}`,
     name,
     discovery_intent: discovery_intent ?? preset.discovery_intent ?? "beginner",
     languages: languages ?? preset.languages ?? ["Python", "TypeScript"],
     labels: labels ?? preset.labels ?? ["good first issue", "help wanted", "documentation"],
-    include_queries: include_queries ?? preset.include_queries ?? [],
+    include_queries: sizeFilter && !includeQueries.some((q) => String(q).includes(sizeFilter))
+      ? [...includeQueries, `is:issue state:open ${sizeFilter} no:assignee`]
+      : includeQueries,
     exclude_orgs,
     exclude_repos,
     trusted_seed_lists: trusted_seed_lists ?? preset.trusted_seed_lists ?? [],
     max_candidates,
     mode,
     threshold_overrides,
+    require_verified_reward: require_verified_reward ?? preset.require_verified_reward ?? false,
+    shortlist_verdicts: shortlist_verdicts ?? preset.shortlist_verdicts ?? ["GREEN", "YELLOW", "GRAY"],
+    repo_size_filter: sizeFilter ?? null,
     created_at: now,
     updated_at: now,
   });

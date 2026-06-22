@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 
 // Minimal .env loader — no dependencies needed.
@@ -26,7 +26,7 @@ async function loadEnv(projectRoot) {
 import { defaultPolicy } from "./policy.js";
 import { DEFAULT_QUERIES, discoverCandidates } from "./discovery.js";
 import { AuditLog } from "./audit-log.js";
-import { diffReports, loadMonitorSnapshot, saveMonitorSnapshot } from "./monitor.js";
+import { diffReports, loadMonitorSnapshot, saveMonitorSnapshot, buildKnownCandidatesMap, summarizeMonitorEvents, monitorHasActionableEvents } from "./monitor.js";
 import {
   createSearchProfile,
   loadSearchProfile,
@@ -58,9 +58,22 @@ import {
   validateNetworkExpansionContract,
 } from "./network-design.js";
 import { resolveDiscoveryIntent } from "./profiles.js";
+import { executeWorkflow, loadSessionManifest } from "./workflow.js";
 
 async function main(argv) {
   const [command, ...args] = argv;
+  if (command === "workflow" && args.includes("--help")) {
+    printWorkflowHelp();
+    return 0;
+  }
+  if (command === "plan" && args.includes("--help")) {
+    printPlanHelp();
+    return 0;
+  }
+  if (command === "probe" && args.includes("--help")) {
+    printProbeHelp();
+    return 0;
+  }
   if (!command || ["-h", "--help", "help"].includes(command)) {
     printHelp();
     return 0;
@@ -298,7 +311,7 @@ async function handoffCommand(args) {
     throw new Error("handoff requires --report <report.json>.");
   }
   const report = await loadReport(reportPath);
-  const handoff = exportHandoffPackages(report);
+  const handoff = exportHandoffPackages(report, { shortlistLimit: readLimit(readArg(args, "--shortlist-limit", "10")) });
   await writeFile(jsonOut, JSON.stringify(handoff, null, 2), "utf8");
   console.log(`Scout handoff package written to ${jsonOut}`);
   return 0;
@@ -354,7 +367,7 @@ async function discover(args) {
   const out = readArg(args, "--out", "scout_report.md");
   const jsonOut = readArg(args, "--json-out", null);
   const policy = defaultPolicy(mode);
-  const report = await buildReport({ policy, limit });
+  const report = await buildReport({ policy, limit, discoveryOptions: readDiscoveryOptions(args) });
   await writeReportOutputs(report, out, jsonOut);
   console.log(`Scout discovery report written to ${out}`);
   if (jsonOut) console.log(`Scout machine report written to ${jsonOut}`);
@@ -367,17 +380,24 @@ async function inspect(args) {
   const jsonOut = readArg(args, "--json-out", null);
   const reportPath = readArg(args, "--report", null);
   const manifestPath = readArg(args, "--manifest", null);
+  const candidateId = readArg(args, "--candidate-id", null);
   const fetchArchives = readFlag(args, "--fetch-archives");
   const auditLog = new AuditLog();
 
   let report;
-  if (!reportPath || (!manifestPath && !fetchArchives)) {
-    throw new Error("inspect requires --report <scout_report.json> and either --manifest <manifest.json> or --fetch-archives.");
+  if (!reportPath || (!manifestPath && !fetchArchives && !candidateId)) {
+    throw new Error("inspect requires --report <scout_report.json> and either --manifest <manifest.json>, --fetch-archives, or --candidate-id.");
   } else {
     const baseReport = await loadReport(reportPath);
     const manifestModel = manifestPath ? await loadJson(manifestPath) : null;
+    const targetCandidates = candidateId
+      ? baseReport.candidates.filter((candidate) => candidate.candidate_id === candidateId)
+      : baseReport.candidates;
+    if (candidateId && targetCandidates.length === 0) {
+      throw new Error(`Unknown candidate id: ${candidateId}`);
+    }
     const inspectedCandidates = [];
-    for (const candidate of baseReport.candidates) {
+    for (const candidate of targetCandidates) {
       if (fetchArchives) {
         inspectedCandidates.push(await inspectCandidateStaticArchive({ policy, candidate }));
       } else {
@@ -391,7 +411,13 @@ async function inspect(args) {
       }
     }
     const staticEvidence = inspectedCandidates.flatMap(evidenceFromStaticInspection);
-    const decisions = triageCandidates(inspectedCandidates, {
+    const mergeCandidates = candidateId
+      ? baseReport.candidates.map((candidate) => {
+          const updated = inspectedCandidates.find((item) => item.candidate_id === candidate.candidate_id);
+          return updated ?? candidate;
+        })
+      : inspectedCandidates;
+    const decisions = triageCandidates(mergeCandidates, {
       profile: {
         profile_id: baseReport.triage_config?.profile_id,
         threshold_overrides: baseReport.triage_config?.threshold_overrides ?? {},
@@ -423,7 +449,7 @@ async function inspect(args) {
     report = createReportModel({
       run_status: baseReport.run_status,
       collection_errors: baseReport.collection_errors,
-      candidates: inspectedCandidates,
+      candidates: mergeCandidates,
       decisions,
       evidence: [...baseReport.evidence, ...staticEvidence],
       audit_events: [...baseReport.audit_events, ...auditLog.all()],
@@ -472,7 +498,7 @@ async function profile(args) {
     const jsonOut = readArg(args, "--json-out", null);
     const profileModel = await loadProfileOrDefault(name);
     const policy = defaultPolicy("metadata_only");
-    const report = await buildProfileReport({ policy, profile: profileModel });
+    const report = await buildProfileReport({ policy, profile: profileModel, discoveryOptions: readDiscoveryOptions(args) });
     await writeReportOutputs(report, out, jsonOut);
     console.log(`Scout profile report written to ${out}`);
     if (jsonOut) console.log(`Scout machine report written to ${jsonOut}`);
@@ -485,10 +511,18 @@ async function monitor(args) {
   const profileName = readArg(args, "--profile", "default");
   const out = readArg(args, "--out", "scout_watch_report.md");
   const jsonOut = readArg(args, "--json-out", null);
+  const skipKnown = readFlag(args, "--skip-known");
+  const since = readArg(args, "--since", null);
+  const notify = readFlag(args, "--notify");
   const profileModel = await loadProfileOrDefault(profileName);
   const policy = defaultPolicy("metadata_only");
   const previous = await loadMonitorSnapshot(profileName);
-  const current = await buildProfileReport({ policy, profile: profileModel });
+  const discoveryOptions = {
+    ...readDiscoveryOptions(args),
+    ...(since ? { since } : {}),
+    ...(skipKnown && previous ? { knownCandidates: buildKnownCandidatesMap(previous) } : {}),
+  };
+  const current = await buildProfileReport({ policy, profile: profileModel, discoveryOptions });
   const monitorEvents = diffReports(previous?.decisions ?? [], current.decisions, profileModel.profile_id);
   const report = createReportModel({
     run_status: current.run_status,
@@ -506,45 +540,77 @@ async function monitor(args) {
   await saveMonitorSnapshot(profileName, report);
   await writeReportOutputs(report, out, jsonOut);
   console.log(`Scout monitor report written to ${out}`);
-  if (jsonOut) console.log(`Scout machine report written to ${jsonOut}`);
-  return 0;
+  if (jsonOut) console.log(`Scout monitor machine report written to ${jsonOut}`);
+  if (notify) {
+    const summary = summarizeMonitorEvents(monitorEvents);
+    console.log(`SCOUT_MONITOR profile=${profileName} new=${summary.new} improved=${summary.improved} downgraded=${summary.downgraded} missing=${summary.missing}`);
+  }
+  return monitorHasActionableEvents(monitorEvents) ? 1 : 0;
 }
 
 async function workflow(args) {
   const action = args[0];
+  if (action === "resume") {
+    const sessionDir = readArg(args, "--session", readArg(args, "--out-dir", "scout_session"));
+    const manifest = await loadSessionManifest(sessionDir);
+    const profileModel = manifest.profile ?? (await loadProfileOrDefault("default"));
+    const reportPath = join(sessionDir, manifest.artifacts?.report_json ?? "scout_report.json");
+    const report = await loadReport(reportPath);
+    const shortlistLimit = readLimit(readArg(args, "--shortlist-limit", "10"));
+    await executeWorkflow({
+      outDir: sessionDir,
+      profileModel,
+      report,
+      shortlistLimit,
+      resume: true,
+      existingManifest: manifest,
+      renderAgentSummary,
+      createNextActions,
+    });
+    console.log(`Scout workflow resumed in ${sessionDir}`);
+    return 0;
+  }
   if (action !== "run") {
-    throw new Error("workflow command requires run");
+    throw new Error("workflow command requires run or resume");
   }
   const profileName = readArg(args, "--profile", "default");
   const outDir = readArg(args, "--out-dir", "scout_session");
+  const through = readArg(args, "--through", null);
+  const shortlistLimit = readLimit(readArg(args, "--shortlist-limit", "10"));
   const profileModel = await loadProfileOrDefault(profileName);
   const policy = defaultPolicy("metadata_only");
-  const report = await buildProfileReport({ policy, profile: profileModel });
-  const shortlist = exportShortlist(report, { limit: 10 });
-  const summary = renderAgentSummary(report, profileModel);
-  const nextActions = createNextActions(report);
+  const discoveryOptions = readDiscoveryOptions(args);
+  const report = await buildProfileReport({ policy, profile: profileModel, discoveryOptions });
 
-  await mkdir(outDir, { recursive: true });
-  await writeFile(join(outDir, "scout_session.json"), JSON.stringify({ profile: profileModel, generated_at: new Date().toISOString() }, null, 2), "utf8");
-  await writeFile(join(outDir, "scout_report.md"), renderMarkdownReport(report), "utf8");
-  await writeFile(join(outDir, "scout_report.json"), JSON.stringify(report, null, 2), "utf8");
-  await writeFile(join(outDir, "scout_shortlist.md"), shortlist, "utf8");
-  await writeFile(join(outDir, "agent_summary.md"), summary, "utf8");
-  await writeFile(join(outDir, "codex_summary.md"), summary, "utf8");
-  await writeFile(join(outDir, "next_actions.json"), JSON.stringify(nextActions, null, 2), "utf8");
-  await writeFile(join(outDir, "handoff_package.json"), JSON.stringify(exportHandoffPackages(report), null, 2), "utf8");
+  await executeWorkflow({
+    outDir,
+    profileModel,
+    report,
+    through,
+    shortlistLimit,
+    renderAgentSummary,
+    createNextActions,
+  });
   console.log(`Scout workflow artifacts written to ${outDir}`);
   return 0;
 }
 
-async function buildReport({ policy, limit, queries, profile = null }) {
+async function buildReport({ policy, limit, queries, profile = null, discoveryOptions = {} }) {
   const auditLog = new AuditLog();
   const evidence = [];
   const collectionErrors = [];
   const activeQueries = queries ?? DEFAULT_QUERIES;
   let candidates;
   try {
-    candidates = await discoverCandidates({ policy, limit, queries: activeQueries, auditLog, collectionErrors, profile });
+    candidates = await discoverCandidates({
+      policy,
+      limit,
+      queries: activeQueries,
+      auditLog,
+      collectionErrors,
+      profile,
+      ...discoveryOptions,
+    });
   } catch (error) {
     if (error.code === "SCOUT_POLICY_DENIED") throw error;
     auditLog.record({
@@ -586,14 +652,23 @@ async function buildReport({ policy, limit, queries, profile = null }) {
   });
 }
 
-async function buildProfileReport({ policy, profile }) {
+async function buildProfileReport({ policy, profile, discoveryOptions = {} }) {
   const trustedSeedLists = await loadTrustedSeedLists(profile.trusted_seed_lists ?? []);
   return buildReport({
     policy,
     limit: profile.max_candidates,
     queries: queriesFromProfile(profile, { trustedSeedLists }),
     profile,
+    discoveryOptions,
   });
+}
+
+function readDiscoveryOptions(args) {
+  const enrichMode = readArg(args, "--enrich-mode", null);
+  return {
+    cacheEnabled: !readFlag(args, "--no-cache"),
+    ...(enrichMode ? { enrichMode } : {}),
+  };
 }
 
 function appendCandidateMetadataEvidence(candidates, evidence) {
@@ -773,36 +848,53 @@ function createNextActions(report) {
   }));
 }
 
+function printWorkflowHelp() {
+  console.log(`Scout workflow
+
+  scout workflow run --profile <id> --out-dir <dir> [--through discover,static,cockpit,handoff] [--shortlist-limit N] [--no-cache] [--enrich-mode auto|rest|graphql]
+  scout workflow resume --session <dir> [--shortlist-limit N]
+
+Stages: discover, static (manifest-only), cockpit, handoff`);
+}
+
+function printPlanHelp() {
+  console.log(`Scout plan
+
+  scout plan install-dry-run --report <json> --candidate-id <id> --contract <json>
+  scout plan network-design --report <json> --candidate-id <id> [--contract <json>]`);
+}
+
+function printProbeHelp() {
+  console.log(`Scout probe
+
+  scout probe doctor [--image <image>] [--json-out <path>]
+  scout probe --report <json> --candidate-id <id> --approval-id <id> [--network none|registry_allowlist] [--command-set readonly|install_probe|test_probe]`);
+}
+
 function printHelp() {
-  console.log(`Scout Release 3
+  console.log(`Scout 0.3.x
 
 Agent-facing CLI commands:
   scout run --safe --limit 50 --out scout_report.md
-  scout discover --mode metadata_only --limit 50 --out scout_report.md --json-out scout_report.json
-  scout inspect --report scout_report.json --manifest manifest.json --out scout_static_report.md --json-out scout_static_report.json
-  scout inspect --report scout_report.json --fetch-archives --out scout_static_report.md --json-out scout_static_report.json
+  scout discover --limit 50 --no-cache --enrich-mode auto --out scout_report.md --json-out scout_report.json
+  scout inspect --report scout_report.json --candidate-id SCOUT-0001 --out scout_static_report.md
+  scout inspect --report scout_report.json --manifest manifest.json --out scout_static_report.md
   scout validate-report --report scout_report.json
   scout explain --candidate-id SCOUT-0001 --report scout_report.json
   scout export-shortlist --report scout_report.json --limit 25 --out scout_shortlist.md
-  scout profile create beginner-python-ts --intent beginner --languages Python,TypeScript --trusted-seed-lists default
-  scout profile create rewarded-typescript --intent rewarded --languages TypeScript --trusted-seed-lists rewarded-programs
+  scout profile create beginner-python-ts --intent beginner
   scout profile run beginner-python-ts --out scout_report.md
-  scout monitor --profile beginner-python-ts --out scout_watch_report.md
-  scout workflow run --profile beginner-python-ts --out-dir scout_session
-  scout cockpit --report scout_report.json --out scout_cockpit.md --json-out scout_cockpit.json
-  scout plan install-dry-run --report scout_static_report.json --candidate-id SCOUT-0001 --contract network_contract.json
-  scout plan network-design --report scout_static_report.json --candidate-id SCOUT-0001 --out scout_network_design.md
+  scout monitor --profile beginner-python-ts --skip-known --notify --out scout_watch_report.md
+  scout workflow run --profile beginner-python-ts --out-dir scout_session --through discover,cockpit,handoff
+  scout workflow resume --session scout_session
+  scout cockpit --report scout_report.json
   scout handoff --report scout_report.json --json-out handoff_package.json
-  scout probe doctor --json-out scout_probe_doctor.json
-  scout probe --report scout_static_report.json --candidate-id SCOUT-0001 --approval-id APPROVAL-123 --network none --command-set readonly --out scout_probe_report.md --json-out scout_probe_report.json
-  scout probe --report scout_static_report.json --candidate-id SCOUT-0001 --approval-id "<R2D approval phrase>" --network registry_allowlist --command-set install_probe --contract network_contract.json
-  scout test-policy
+  scout probe doctor
 
-Top-level --help is available; subcommand-specific --help is not implemented.
-Discovery intents: beginner (learning-focused) | rewarded (income/bounty metadata).
-Release 3 adds registry-allowlisted install/test probes with R2D approval phrases and egress logging.
-Readonly probes remain approval-bound, Docker-backed, no-network, one candidate at a time, and use local Docker images only.
-Scout still denies clone, installs without approval contract, repo scripts, GitHub writes, issue claiming, forks, branches, PRs, and issue-to-patch workflows.`);
+Subcommand help: scout workflow --help | scout plan --help | scout probe --help
+
+Discovery intents: beginner | rewarded
+Performance: --no-cache, --enrich-mode auto|rest|graphql, SCOUT_GITHUB_CONCURRENCY`);
 }
 
 await loadEnv(process.cwd());

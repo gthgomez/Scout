@@ -139,7 +139,27 @@ export function validateSearchProfile(profile) {
     assertObject(profile.threshold_overrides, "SearchProfile.threshold_overrides");
     resolveThresholds(profile.threshold_overrides);
   }
-  return { ...profile, discovery_intent: discoveryIntent };
+  if (profile.require_verified_reward !== undefined) {
+    if (typeof profile.require_verified_reward !== "boolean") {
+      throw new Error("SearchProfile.require_verified_reward must be a boolean");
+    }
+  }
+  if (profile.shortlist_verdicts !== undefined) {
+    assertArray(profile.shortlist_verdicts, "SearchProfile.shortlist_verdicts");
+    for (const verdict of profile.shortlist_verdicts) {
+      assertEnum(verdict, VERDICTS, "SearchProfile.shortlist_verdicts[]");
+    }
+  }
+  if (profile.repo_size_filter !== undefined && profile.repo_size_filter !== null) {
+    assertString(profile.repo_size_filter, "SearchProfile.repo_size_filter");
+  }
+  return {
+    ...profile,
+    discovery_intent: discoveryIntent,
+    require_verified_reward: profile.require_verified_reward ?? false,
+    shortlist_verdicts: profile.shortlist_verdicts ?? ["GREEN", "YELLOW", "GRAY"],
+    repo_size_filter: profile.repo_size_filter ?? null,
+  };
 }
 
 export function validateTriageConfig(config) {

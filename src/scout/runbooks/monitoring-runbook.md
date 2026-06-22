@@ -7,8 +7,13 @@ This runbook is agent-agnostic. Use it from Cursor, Claude Code, Gemini, Antigra
 Re-run saved candidate profiles on a schedule and report meaningful changes across candidate quality and state over time.
 
 ## Expected Scout CLI backend calls
-- `scout monitor --profile <profile-id> --out scout_watch_report.md --json-out scout_watch_report.json`
+- `scout monitor --profile <profile-id> --skip-known --notify --out scout_watch_report.md --json-out scout_watch_report.json`
+- `scout monitor --profile <profile-id> --since <iso8601> --out scout_watch_report.md`
 - `scout profile run <profile-id> --out scout_report.md`
 
 ## Notes
+- `--skip-known` reuses unchanged candidates from the last snapshot (fewer GitHub API calls).
+- `--notify` prints `SCOUT_MONITOR profile=... new=N improved=N ...` for schedulers.
+- Exit code **1** when new or improved candidates appear.
+- Example scheduler script: `scripts/monitor.ps1`
 - Profiles retain `discovery_intent`; beginner and rewarded monitors use the same pipeline with intent-aware triage.

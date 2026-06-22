@@ -126,3 +126,27 @@ function createMissingCandidateEvent(profileId, previous) {
     human_next_action: "Review before acting; the issue may be closed, relabeled, claimed, or outside the current profile.",
   };
 }
+
+export function buildKnownCandidatesMap(previousReport) {
+  const map = new Map();
+  if (!previousReport?.candidates) return map;
+  for (const candidate of previousReport.candidates) {
+    map.set(`${candidate.repo_owner}/${candidate.repo_name}#${candidate.issue_number}`, candidate);
+  }
+  return map;
+}
+
+export function summarizeMonitorEvents(events) {
+  const summary = { new: 0, improved: 0, downgraded: 0, missing: 0 };
+  for (const event of events) {
+    if (event.change_type === "new_candidate") summary.new += 1;
+    if (event.change_type === "verdict_improved") summary.improved += 1;
+    if (event.change_type === "verdict_downgraded") summary.downgraded += 1;
+    if (event.change_type === "candidate_missing") summary.missing += 1;
+  }
+  return summary;
+}
+
+export function monitorHasActionableEvents(events) {
+  return events.some((event) => ["new_candidate", "verdict_improved"].includes(event.change_type));
+}

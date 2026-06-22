@@ -1,0 +1,10 @@
+{
+  "seed_list_id": "docs-friendly",
+  "name": "Documentation-friendly repositories",
+  "repos": [
+    { "repo": "github/docs", "labels": ["help wanted", "good first issue"] },
+    { "repo": "microsoft/vscode-docs", "labels": ["help wanted", "documentation"] },
+    { "repo": "nodejs/nodejs.org", "labels": ["help wanted", "good first issue"] },
+    { "repo": "typescript-eslint/typescript-eslint", "labels": ["documentation", "good first issue"] }
+  ]
+}
