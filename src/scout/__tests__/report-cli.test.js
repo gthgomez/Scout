@@ -377,14 +377,13 @@ describe("report CLI commands", () => {
       runCli(["workflow", "run", "--profile", "empty", "--out-dir", outDir], { cwd: dir });
       const report = JSON.parse(readFileSync(join(outDir, "scout_report.json"), "utf8"));
       const summary = readFileSync(join(outDir, "agent_summary.md"), "utf8");
-      const legacySummary = readFileSync(join(outDir, "codex_summary.md"), "utf8");
       const nextActions = JSON.parse(readFileSync(join(outDir, "next_actions.json"), "utf8"));
 
       assert.equal(report.run_status, "complete");
       assert.equal(report.triage_config.profile_id, "profile-empty");
       assert.equal(report.triage_config.effective_thresholds.green_min_score, 41);
       assert.ok(summary.includes("No clone, install, repo script"));
-      assert.equal(summary, legacySummary);
+      assert.throws(() => readFileSync(join(outDir, "codex_summary.md"), "utf8"));
       assert.ok(readFileSync(join(outDir, "handoff_package.json"), "utf8").includes("discovery_intent"));
       assert.deepEqual(nextActions, []);
     } finally {

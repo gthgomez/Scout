@@ -22,6 +22,8 @@ Policy gates **Scout CLI operations** (runbook allow/deny lists). Harnesses must
 - `suggested_commands`: read-only CLI follow-ups with session-relative `--report` paths
 - `packages[]`: per-candidate evidence IDs, denied actions, and agent notes
 
+JSON Schema: [`schemas/handoff-package-1.1.json`](schemas/handoff-package-1.1.json). Exports are validated by default.
+
 Do not treat reward metadata as verified payout. `has_observed_reward_metadata` reflects GitHub label/title observations only.
 
 ## Preferred Workflow
@@ -61,8 +63,3 @@ node src/scout/cli.js workflow resume --session scout_session
 ```powershell
 npm run ci
 ```
-
-## Deprecated
-
-- `codex_summary.md` — identical compat copy; removal planned in 0.4.0. Prefer `agent_summary.md`.
-- `codex-*-agent.md` stubs — see [`src/scout/runbooks/README.md`](src/scout/runbooks/README.md).

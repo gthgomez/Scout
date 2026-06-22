@@ -4,7 +4,7 @@ Scout is a policy-enforced, agent-agnostic local tool for finding open-source co
 
 Policy gates **Scout CLI operations** (allowed/denied commands per runbook role). Agent harnesses must follow runbooks; Scout does not enforce policy inside external coding agents.
 
-**Current release: 0.3.4** — workflow presets (fast/full), evidence-derived `handoff_mode`, and archive-backed static stage.
+**Current release: 0.4.0** — handoff JSON Schema, `codex_summary.md` removal, seed-list size filters.
 
 ## Prerequisites
 
@@ -23,7 +23,7 @@ See [`src/scout/runbooks/README.md`](src/scout/runbooks/README.md) for the full 
 - [Decision Cockpit](src/scout/runbooks/decision-cockpit-runbook.md)
 - [Monitoring](src/scout/runbooks/monitoring-runbook.md)
 
-Harness routing: [`AGENTS.md`](AGENTS.md) — **start from `handoff_package.json`**.
+Handoff schema: [`schemas/handoff-package-1.1.json`](schemas/handoff-package-1.1.json) (validated on export). Harness routing: [`AGENTS.md`](AGENTS.md) — start from `handoff_package.json`.
 
 ## Quick Workflow
 
@@ -96,8 +96,9 @@ GitHub Actions (self-hosted only — no cloud runner minutes):
 
 - [`.github/workflows/ci-selfhosted.yml`](.github/workflows/ci-selfhosted.yml) — local Windows runner (`self-hosted`, `windows`), runs `scripts/ci.ps1`
 
+Harness routing: [`AGENTS.md`](AGENTS.md) — **start from `handoff_package.json`**.
+
 ## Deferred
 
-- `codex_summary.md` removal in 0.4.0
-- JSON Schema for handoff/report artifacts in 0.4.0
+- JSON Schema for `scout_report.json` in a future release
 - OpenClaw/Slack monitor notifications

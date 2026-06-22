@@ -116,13 +116,23 @@ export function queriesFromProfile(profile, options = {}) {
   for (const label of profile.labels) {
     for (const language of profile.languages) {
       if (language === "Docs") {
-        queries.push(`is:issue state:open label:"${label}" no:assignee`);
+        queries.push(appendRepoSizeFilter(`is:issue state:open label:"${label}" no:assignee`, profile));
       } else {
-        queries.push(`is:issue state:open label:"${label}" no:assignee language:${language}`);
+        queries.push(
+          appendRepoSizeFilter(`is:issue state:open label:"${label}" no:assignee language:${language}`, profile),
+        );
       }
     }
   }
   return dedupeQueries([...profile.include_queries, ...seedQueriesFromProfile(profile, options.trustedSeedLists ?? []), ...queries]);
+}
+
+export function appendRepoSizeFilter(query, profile) {
+  const filter = profile?.repo_size_filter;
+  if (!filter || String(query).includes(filter)) {
+    return query;
+  }
+  return `${query} ${filter}`;
 }
 
 function seedQueriesFromProfile(profile, trustedSeedLists) {
@@ -150,18 +160,23 @@ function queriesForSeedRepo(seedRepo, profile) {
   const labels = seedRepo.labels ?? profile.labels;
   const languages = seedRepo.languages ?? profile.languages;
   if (labels.length === 0) {
-    return [`repo:${seedRepo.repo} is:issue state:open no:assignee`];
+    return [appendRepoSizeFilter(`repo:${seedRepo.repo} is:issue state:open no:assignee`, profile)];
   }
 
   const queries = [];
   for (const label of labels) {
     if (languages.length === 0) {
-      queries.push(`repo:${seedRepo.repo} is:issue state:open label:"${escapeQueryValue(label)}" no:assignee`);
+      queries.push(
+        appendRepoSizeFilter(
+          `repo:${seedRepo.repo} is:issue state:open label:"${escapeQueryValue(label)}" no:assignee`,
+          profile,
+        ),
+      );
       continue;
     }
     for (const language of languages) {
       const base = `repo:${seedRepo.repo} is:issue state:open label:"${escapeQueryValue(label)}" no:assignee`;
-      queries.push(language === "Docs" ? base : `${base} language:${language}`);
+      queries.push(appendRepoSizeFilter(language === "Docs" ? base : `${base} language:${language}`, profile));
     }
   }
   return queries;

@@ -6,7 +6,7 @@ Scout is a policy-enforced backend for finding open-source contribution candidat
 
 Policy gates **Scout CLI operations** only; harnesses must follow runbooks for allowed/denied actions outside Scout.
 
-Current release: **0.3.4** on `main`.
+Current release: **0.4.0** on `main`.
 
 ## Discovery Intents
 
@@ -45,7 +45,7 @@ CLI: `--workflow-preset fast|full`, `--fetch-archives`, `--static-limit N` (defa
 - `handoff_package.json` — **schema 1.1** primary agent entrypoint (`handoff_mode`, `recommended_packages`)
 - `scout_cockpit.json` when cockpit stage runs
 
-Handoff 1.1 adds `handoff_mode` (`metadata_only` | `static_verified`, derived from archive-backed static evidence when static stage ran), `handoff_mode_reason` when metadata-only, `recommended_packages`, `suggested_commands`, `schema_version`.
+Handoff 1.1 adds `handoff_mode` (`metadata_only` | `static_verified`, derived from archive-backed static evidence when static stage ran), `handoff_mode_reason` when metadata-only, `recommended_packages`, `suggested_commands`, `schema_version`. JSON Schema: [`schemas/handoff-package-1.1.json`](schemas/handoff-package-1.1.json); validated on export.
 
 See [`AGENTS.md`](AGENTS.md) for harness routing.
 
@@ -74,6 +74,7 @@ See [`AGENTS.md`](AGENTS.md) for harness routing.
 | `scripts/benchmark-discovery.ps1` | Discovery mode benchmark |
 | `scripts/monitor.ps1` | Scheduled monitor example |
 | `AGENTS.md` | Harness routing |
+| `schemas/handoff-package-1.1.json` | Handoff package JSON Schema |
 | `.github/workflows/ci-selfhosted.yml` | Self-hosted Windows CI |
 
 ## Verification
@@ -86,6 +87,5 @@ Includes `test:policy`. GitHub Actions CI runs on the self-hosted Windows runner
 
 ## Open Gaps
 
-- Remove `codex_summary.md` in 0.4.0
-- JSON Schema validation for handoff/report in 0.4.0
+- JSON Schema for `scout_report.json`
 - OpenClaw/Slack notifications (deferred)

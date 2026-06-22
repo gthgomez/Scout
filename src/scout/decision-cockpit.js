@@ -1,4 +1,5 @@
 import { resolveDiscoveryIntent } from "./profiles.js";
+import { validateHandoffPackage } from "./validators.js";
 
 const CONFIDENCE_CATEGORIES = Object.freeze([
   "metadata",
@@ -120,7 +121,7 @@ export function exportHandoffPackages(report, options = {}) {
     };
   });
 
-  return {
+  const handoff = {
     schema_version: "1.1",
     entrypoint: "handoff_package.json",
     generated_at: model.generated_at,
@@ -141,6 +142,11 @@ export function exportHandoffPackages(report, options = {}) {
     })),
     packages,
   };
+
+  if (options.validateOnExport !== false) {
+    return validateHandoffPackage(handoff);
+  }
+  return handoff;
 }
 
 function isRecommendablePackage(item, { handoffMode, workflowPreset }) {
