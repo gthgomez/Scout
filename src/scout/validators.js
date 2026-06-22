@@ -462,3 +462,75 @@ function validateArgv(command, name) {
   command.forEach((part, index) => assertString(part, `${name}[${index}]`));
   return command;
 }
+
+const HANDOFF_MODES = Object.freeze(["metadata_only", "static_verified"]);
+const WORKFLOW_PRESETS = Object.freeze(["fast", "full"]);
+
+export function validateHandoffPackage(handoff) {
+  assertObject(handoff, "HandoffPackage");
+  assertString(handoff.schema_version, "HandoffPackage.schema_version");
+  if (handoff.schema_version !== "1.1") {
+    throw new Error("HandoffPackage.schema_version must be 1.1");
+  }
+  if (handoff.entrypoint !== "handoff_package.json") {
+    throw new Error("HandoffPackage.entrypoint must be handoff_package.json");
+  }
+  assertString(handoff.generated_at, "HandoffPackage.generated_at");
+  assertEnum(handoff.discovery_intent, DISCOVERY_INTENTS, "HandoffPackage.discovery_intent");
+  assertEnum(handoff.handoff_mode, HANDOFF_MODES, "HandoffPackage.handoff_mode");
+  if (handoff.handoff_mode_reason !== null && handoff.handoff_mode_reason !== undefined) {
+    assertString(handoff.handoff_mode_reason, "HandoffPackage.handoff_mode_reason");
+  }
+  assertEnum(handoff.workflow_preset, WORKFLOW_PRESETS, "HandoffPackage.workflow_preset");
+  if (handoff.reward_disclaimer !== null && handoff.reward_disclaimer !== undefined) {
+    assertString(handoff.reward_disclaimer, "HandoffPackage.reward_disclaimer");
+  }
+  assertArray(handoff.recommended_packages, "HandoffPackage.recommended_packages");
+  handoff.recommended_packages.forEach((id, index) =>
+    assertString(id, `HandoffPackage.recommended_packages[${index}]`),
+  );
+  assertArray(handoff.suggested_commands, "HandoffPackage.suggested_commands");
+  handoff.suggested_commands.forEach((command, index) => {
+    assertObject(command, `HandoffPackage.suggested_commands[${index}]`);
+    if (command.kind !== "readonly_cli") {
+      throw new Error(`HandoffPackage.suggested_commands[${index}].kind must be readonly_cli`);
+    }
+    assertString(command.command, `HandoffPackage.suggested_commands[${index}].command`);
+    if (command.cwd !== null && command.cwd !== undefined) {
+      assertString(command.cwd, `HandoffPackage.suggested_commands[${index}].cwd`);
+    }
+    assertString(command.reason, `HandoffPackage.suggested_commands[${index}].reason`);
+  });
+  assertArray(handoff.packages, "HandoffPackage.packages");
+  handoff.packages.forEach((pkg, index) => validateHandoffPackageEntry(pkg, `HandoffPackage.packages[${index}]`));
+  return handoff;
+}
+
+function validateHandoffPackageEntry(pkg, name) {
+  assertObject(pkg, name);
+  assertString(pkg.candidate_id, `${name}.candidate_id`);
+  assertEnum(pkg.verdict, VERDICTS, `${name}.verdict`);
+  assertEnum(pkg.discovery_intent, DISCOVERY_INTENTS, `${name}.discovery_intent`);
+  if (pkg.income_summary !== null && pkg.income_summary !== undefined) {
+    assertString(pkg.income_summary, `${name}.income_summary`);
+  }
+  if (typeof pkg.has_observed_reward_metadata !== "boolean") {
+    throw new Error(`${name}.has_observed_reward_metadata must be a boolean`);
+  }
+  assertString(pkg.repo_url, `${name}.repo_url`);
+  assertString(pkg.issue_url, `${name}.issue_url`);
+  assertArray(pkg.reward_signals, `${name}.reward_signals`);
+  assertArray(pkg.evidence_ids, `${name}.evidence_ids`);
+  pkg.evidence_ids.forEach((id, index) => assertString(id, `${name}.evidence_ids[${index}]`));
+  assertArray(pkg.risks, `${name}.risks`);
+  pkg.risks.forEach((risk, index) => assertString(risk, `${name}.risks[${index}]`));
+  assertArray(pkg.denied_commands, `${name}.denied_commands`);
+  assertArray(pkg.suggested_first_files, `${name}.suggested_first_files`);
+  pkg.suggested_first_files.forEach((file, index) => assertString(file, `${name}.suggested_first_files[${index}]`));
+  assertArray(pkg.allowed_actions, `${name}.allowed_actions`);
+  pkg.allowed_actions.forEach((action, index) => assertString(action, `${name}.allowed_actions[${index}]`));
+  assertArray(pkg.denied_actions, `${name}.denied_actions`);
+  pkg.denied_actions.forEach((action, index) => assertString(action, `${name}.denied_actions[${index}]`));
+  assertString(pkg.agent_notes, `${name}.agent_notes`);
+  return pkg;
+}

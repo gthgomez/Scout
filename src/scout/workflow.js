@@ -73,7 +73,6 @@ async function runDiscoverStage({
   await writeFile(join(outDir, "scout_report.json"), JSON.stringify(report, null, 2), "utf8");
   await writeFile(join(outDir, "scout_shortlist.md"), shortlist, "utf8");
   await writeFile(join(outDir, "agent_summary.md"), summary, "utf8");
-  await writeFile(join(outDir, "codex_summary.md"), summary, "utf8");
   await writeFile(join(outDir, "next_actions.json"), JSON.stringify(nextActions, null, 2), "utf8");
   await writeFile(join(outDir, "handoff_package.json"), JSON.stringify(handoff, null, 2), "utf8");
 

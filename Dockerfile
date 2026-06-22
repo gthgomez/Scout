@@ -21,4 +21,4 @@ WORKDIR /workspace
 
 # Label for Scout probe identification
 LABEL org.scout.sandbox=true
-LABEL org.scout.version="0.3.4"
+LABEL org.scout.version="0.4.0"

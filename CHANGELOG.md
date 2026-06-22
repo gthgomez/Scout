@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.4.0] — Handoff schema + seed filters
+
+### Added
+- [`schemas/handoff-package-1.1.json`](schemas/handoff-package-1.1.json) — JSON Schema for `handoff_package.json`
+- `validateHandoffPackage()` — validates handoff exports by default in `exportHandoffPackages`
+
+### Changed
+- `repo_size_filter` applied to trusted seed-list queries and broad profile-generated queries
+- Removed `codex_summary.md` from workflow discover output (use `agent_summary.md`)
+
+### Deferred
+- JSON Schema for `scout_report.json`
+
 ## [0.3.4] — Handoff mode from evidence
 
 ### Fixed
@@ -36,8 +49,8 @@
 - Probe runbook: argv-inferred registry check wording
 
 ### Deferred (0.4.0)
-- `codex_summary.md` removal
-- JSON Schema for `handoff_package.json` / `scout_report.json`
+- JSON Schema for `scout_report.json`
+- OpenClaw/Slack monitor notifications
 
 ## [0.3.2] — Profiles + incremental monitor
 

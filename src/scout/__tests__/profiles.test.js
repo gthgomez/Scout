@@ -8,6 +8,7 @@ import {
   createSearchProfile,
   loadSearchProfile,
   queriesFromProfile,
+  appendRepoSizeFilter,
   profileAllowsOperation,
   saveSearchProfile,
 } from "../profiles.js";
@@ -101,6 +102,38 @@ describe("search profiles", () => {
 
     assert.equal(queries.filter((query) => (typeof query === "string" ? query : query.query) === duplicatedSeedQuery).length, 1);
     assert.equal(queries[0], duplicatedSeedQuery);
+  });
+
+  it("applies repo_size_filter to trusted seed list and broad profile queries", () => {
+    const profile = validateSearchProfile({
+      ...fixtures.searchProfile,
+      repo_size_filter: "stars:<500",
+      labels: ["good first issue"],
+      languages: ["Python"],
+      trusted_seed_lists: ["starter-pack"],
+    });
+    const queries = queriesFromProfile(profile, {
+      trustedSeedLists: [
+        {
+          seed_list_id: "starter-pack",
+          name: "Starter Pack",
+          repos: [{ repo: "n8n-io/n8n", labels: ["good first issue"], languages: ["Python"] }],
+        },
+      ],
+    });
+
+    const seedQuery = queries.find((query) => typeof query === "object" && query.repo === "n8n-io/n8n");
+    assert.ok(seedQuery.query.includes("stars:<500"));
+    assert.ok(
+      queries.some(
+        (query) =>
+          typeof query === "string" &&
+          query.includes('label:"good first issue"') &&
+          query.includes("stars:<500"),
+      ),
+    );
+    assert.equal(appendRepoSizeFilter("repo:foo/bar is:issue state:open", profile).includes("stars:<500"), true);
+    assert.equal(appendRepoSizeFilter("repo:foo/bar stars:<500", profile), "repo:foo/bar stars:<500");
   });
 
   it("allows harmless operations and blocks forbidden ones", () => {

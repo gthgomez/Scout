@@ -13,8 +13,10 @@ import {
   validateSandboxRun,
   validateSearchProfile,
   validateSetupIntelligence,
+  validateHandoffPackage,
   validateTriageDecision,
 } from "../validators.js";
+import { exportHandoffPackages } from "../decision-cockpit.js";
 
 const fixturePath = join(dirname(fileURLToPath(import.meta.url)), "fixtures");
 const monitoring = JSON.parse(readFileSync(join(fixturePath, "monitoring.json"), "utf8"));
@@ -349,5 +351,14 @@ describe("validators", () => {
     };
 
     assert.throws(() => validateReportModel(report), /lacks evidence records/);
+  });
+
+  it("validates handoff package exports against schema 1.1 contract", () => {
+    const handoff = exportHandoffPackages(reports.validReport, {
+      shortlistLimit: 5,
+      workflowPresetEffective: "fast",
+    });
+    assert.equal(validateHandoffPackage(handoff).schema_version, "1.1");
+    assert.throws(() => validateHandoffPackage({ ...handoff, schema_version: "9.9" }), /schema_version/);
   });
 });
