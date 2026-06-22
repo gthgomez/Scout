@@ -49,6 +49,7 @@ Subcommand help: `scout workflow --help`, `scout plan --help`, `scout probe --he
 - Rewarded candidates include `reward_signals`, `has_verified_reward_signal`, `has_observed_reward_metadata`, `has_inferred_reward_signal`, and optional `estimated_reward_usd` (inferred only).
 - Discovery-only candidates without setup evidence must not be promoted to `GREEN` in beginner mode; rewarded mode may surface `GRAY` with `REWARD_GAP` when no reward signal exists.
 - `scout_session.json` records `workflow_preset_requested`, `workflow_preset_effective`, and `static_fetch_archives`.
+- Profiles with `repo_size_filter` (e.g. `stars:<500`) apply the filter to trusted seed-list queries and broad label/language queries via `appendRepoSizeFilter` — repos above the threshold may return zero issues even when listed in a seed file.
 
 ## Safety stops
 - Stop if any denied operation is attempted.

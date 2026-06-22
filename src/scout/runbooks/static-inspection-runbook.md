@@ -6,8 +6,6 @@ This runbook is agent-agnostic. Use it from Cursor, Claude Code, Gemini, Antigra
 ## Purpose
 Collect static, read-only repository evidence to confirm setup feasibility and reduce false `GREEN` signals before handoff to a human coder or downstream probe planning.
 
-Moved from the former `codex-static-inspection-agent.md`. See that stub for the prior filename.
-
 ## Allowed Operations
 - `github_issue_metadata_read`
 - `github_repo_metadata_read`

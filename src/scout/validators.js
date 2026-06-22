@@ -10,6 +10,7 @@ import {
   VERDICTS,
 } from "./types.js";
 import { validateTrustedSeedListId } from "./seed-lists.js";
+import { WORKFLOW_STAGES } from "./session.js";
 import { resolveThresholds } from "./triage.js";
 
 function assertObject(value, name) {
@@ -533,4 +534,38 @@ function validateHandoffPackageEntry(pkg, name) {
   pkg.denied_actions.forEach((action, index) => assertString(action, `${name}.denied_actions[${index}]`));
   assertString(pkg.agent_notes, `${name}.agent_notes`);
   return pkg;
+}
+
+const WORKFLOW_PRESET_VALUES = Object.freeze(["fast", "full"]);
+const SESSION_ARTIFACT_KEYS = Object.freeze([
+  "report_json",
+  "report_md",
+  "shortlist_md",
+  "agent_summary_md",
+  "handoff_json",
+]);
+
+export function validateSessionManifest(manifest) {
+  assertObject(manifest, "SessionManifest");
+  assertString(manifest.session_id, "SessionManifest.session_id");
+  assertObject(manifest.profile, "SessionManifest.profile");
+  if (manifest.workflow_preset_requested !== null && manifest.workflow_preset_requested !== undefined) {
+    assertEnum(manifest.workflow_preset_requested, WORKFLOW_PRESET_VALUES, "SessionManifest.workflow_preset_requested");
+  }
+  if (manifest.workflow_preset_effective !== null && manifest.workflow_preset_effective !== undefined) {
+    assertEnum(manifest.workflow_preset_effective, WORKFLOW_PRESET_VALUES, "SessionManifest.workflow_preset_effective");
+  }
+  if (typeof manifest.static_fetch_archives !== "boolean") {
+    throw new Error("SessionManifest.static_fetch_archives must be a boolean");
+  }
+  assertArray(manifest.stages_completed, "SessionManifest.stages_completed");
+  manifest.stages_completed.forEach((stage, index) => {
+    assertEnum(stage, WORKFLOW_STAGES, `SessionManifest.stages_completed[${index}]`);
+  });
+  assertObject(manifest.artifacts, "SessionManifest.artifacts");
+  for (const key of SESSION_ARTIFACT_KEYS) {
+    assertString(manifest.artifacts[key], `SessionManifest.artifacts.${key}`);
+  }
+  assertString(manifest.generated_at, "SessionManifest.generated_at");
+  return manifest;
 }

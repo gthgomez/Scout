@@ -13,7 +13,7 @@ Re-run saved candidate profiles on a schedule and report meaningful changes acro
 
 ## Notes
 - `--skip-known` reuses unchanged candidates from the last snapshot (fewer GitHub API calls).
-- `--notify` is a **stdout hook only** — prints one line such as `SCOUT_MONITOR profile=... new=N improved=N ...` for schedulers. Scout does not send webhooks or Slack messages directly.
+- `--notify` is a **stdout hook only** — prints one line such as `SCOUT_MONITOR profile=... new=N improved=N ...` for schedulers. Scout does not send webhooks, Slack, or OpenClaw messages directly (native integration deferred).
 - Exit code **1** when new or improved candidates appear.
 - Example scheduler script: `scripts/monitor.ps1` (Windows Task Scheduler).
 - Webhook example wrapper (run after monitor, on exit code 1):

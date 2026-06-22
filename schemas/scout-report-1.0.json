@@ -1,0 +1,157 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/gthgomez/Scout/schemas/scout-report-1.0.json",
+  "title": "Scout Report",
+  "description": "Machine report from scout discover, inspect, workflow, or monitor runs. Validated at creation by validateReportModel (no schema_version field on artifact).",
+  "type": "object",
+  "required": [
+    "generated_at",
+    "discovery_intent",
+    "run_status",
+    "runtime_safety_status",
+    "triage_config",
+    "collection_errors",
+    "candidates",
+    "evidence",
+    "decisions",
+    "audit_events",
+    "monitor_events",
+    "command_attempts"
+  ],
+  "properties": {
+    "generated_at": { "type": "string", "format": "date-time" },
+    "discovery_intent": { "enum": ["beginner", "rewarded"] },
+    "run_status": { "enum": ["complete", "partial", "failed"] },
+    "runtime_safety_status": { "type": "string" },
+    "triage_config": { "$ref": "#/$defs/triageConfig" },
+    "collection_errors": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/collectionError" }
+    },
+    "candidates": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/candidateIssue" }
+    },
+    "evidence": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/evidenceItem" }
+    },
+    "decisions": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/triageDecision" }
+    },
+    "audit_events": { "type": "array" },
+    "monitor_events": { "type": "array" },
+    "command_attempts": { "type": "array" },
+    "sandbox_runs": { "type": "array" },
+    "probe_config": { "type": ["object", "null"] },
+    "probe_status": {
+      "enum": ["not_requested", "blocked", "complete", "partial", "failed"]
+    },
+    "profile": { "type": "object" }
+  },
+  "$defs": {
+    "triageConfig": {
+      "type": "object",
+      "required": ["profile_id", "threshold_overrides", "effective_thresholds"],
+      "properties": {
+        "profile_id": { "type": "string" },
+        "discovery_intent": { "enum": ["beginner", "rewarded"] },
+        "threshold_overrides": { "type": "object" },
+        "effective_thresholds": { "type": "object" }
+      }
+    },
+    "collectionError": {
+      "type": "object",
+      "required": ["error_id", "operation", "message", "observed_at"],
+      "properties": {
+        "error_id": { "type": "string" },
+        "operation": { "type": "string" },
+        "query": { "type": ["string", "null"] },
+        "message": { "type": "string" },
+        "observed_at": { "type": "string" }
+      }
+    },
+    "candidateIssue": {
+      "type": "object",
+      "required": [
+        "candidate_id",
+        "repo_owner",
+        "repo_name",
+        "repo_url",
+        "issue_title",
+        "issue_url",
+        "discovered_by_query",
+        "collection_status"
+      ],
+      "properties": {
+        "candidate_id": { "type": "string" },
+        "repo_owner": { "type": "string" },
+        "repo_name": { "type": "string" },
+        "repo_url": { "type": "string" },
+        "issue_number": { "type": "number" },
+        "issue_title": { "type": "string" },
+        "issue_url": { "type": "string" },
+        "discovered_by_query": { "type": "string" },
+        "collection_status": { "enum": ["OBSERVED", "PARTIAL", "FAILED"] },
+        "static_inspection_status": { "type": "string" },
+        "labels": { "type": "array" },
+        "assignees": { "type": "array" },
+        "linked_prs": { "type": "array" },
+        "source_observations": { "type": "array" }
+      }
+    },
+    "evidenceItem": {
+      "type": "object",
+      "required": [
+        "evidence_id",
+        "candidate_id",
+        "source_ref",
+        "observed_at",
+        "claim",
+        "supports",
+        "source_type",
+        "trust_level"
+      ],
+      "properties": {
+        "evidence_id": { "type": "string" },
+        "candidate_id": { "type": "string" },
+        "source_ref": { "type": "string" },
+        "observed_at": { "type": "string" },
+        "claim": { "type": "string" },
+        "supports": { "type": "string" },
+        "source_type": {
+          "enum": ["GITHUB_API", "STATIC_FILE", "SANDBOX_COMMAND", "HUMAN_INPUT", "INFERRED", "UNKNOWN"]
+        },
+        "trust_level": { "enum": ["OBSERVED", "INFERRED", "PROPOSED", "UNKNOWN"] }
+      }
+    },
+    "triageDecision": {
+      "type": "object",
+      "required": [
+        "candidate_id",
+        "verdict",
+        "gap_codes",
+        "risk_summary",
+        "setup_status",
+        "abandon_criteria",
+        "human_next_action"
+      ],
+      "properties": {
+        "candidate_id": { "type": "string" },
+        "verdict": { "enum": ["GREEN", "YELLOW", "RED", "GRAY"] },
+        "gap_codes": { "type": "array", "items": { "type": "string" } },
+        "risk_summary": { "type": "string" },
+        "setup_status": {
+          "enum": ["not_executed", "unknown", "static_docs_ok", "static_docs_risky", "passed"]
+        },
+        "abandon_criteria": { "type": "string" },
+        "human_next_action": { "type": "string" },
+        "drop_reason": { "type": ["string", "null"] },
+        "income_summary": { "type": ["string", "null"] },
+        "score": { "type": "number" },
+        "rank": { "type": ["number", "null"] }
+      }
+    }
+  }
+}

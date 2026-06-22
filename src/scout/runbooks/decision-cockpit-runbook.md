@@ -24,7 +24,7 @@ Review Scout triage output with confidence categories, why-not-GREEN reasoning, 
 ## Workflow
 1. Validate the report schema and decision coverage.
 2. Export the decision cockpit for human or agent review.
-3. Export `handoff_package.json` (schema 1.1) — start here for external coding agents. Read `recommended_packages`, `handoff_mode`, `workflow_preset`, and `suggested_commands` first.
+3. Export `handoff_package.json` (schema 1.1) — start here for external coding agents. Read `recommended_packages`, `handoff_mode`, `workflow_preset`, and `suggested_commands` first. JSON Schema: [`schemas/handoff-package-1.1.json`](../../../schemas/handoff-package-1.1.json).
 4. Check `handoff_mode` before handoff: `static_verified` only when archive fetch ran and at least one shortlist candidate has non-low `static_evidence` confidence; otherwise `metadata_only` (see `handoff_mode_reason`).
 5. Review cockpit confidence categories — especially `static_evidence` — before recommending any package for coding-agent handoff.
 6. For install/test planning, generate R2D network design text and install dry-run plans without executing them unless an approved registry probe is explicitly requested later.
