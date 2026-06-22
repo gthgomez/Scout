@@ -2,16 +2,35 @@ import { join } from "node:path";
 
 export const WORKFLOW_STAGES = Object.freeze(["discover", "static", "cockpit", "handoff"]);
 
+export const WORKFLOW_PRESETS = Object.freeze({
+  fast: "discover,cockpit,handoff",
+  full: "discover,static,cockpit,handoff",
+});
+
+export function resolveWorkflowPreset(presetName) {
+  const through = WORKFLOW_PRESETS[presetName];
+  if (!through) {
+    throw new Error(`Unknown workflow preset: ${presetName}. Allowed: ${Object.keys(WORKFLOW_PRESETS).join(", ")}`);
+  }
+  return through;
+}
+
 export function createSessionManifest({
   sessionId,
   profile,
   stagesCompleted = [],
   artifacts = {},
+  workflowPresetRequested = null,
+  workflowPresetEffective = null,
+  staticFetchArchives = false,
   generatedAt = new Date().toISOString(),
 }) {
   return {
     session_id: sessionId,
     profile,
+    workflow_preset_requested: workflowPresetRequested,
+    workflow_preset_effective: workflowPresetEffective,
+    static_fetch_archives: staticFetchArchives,
     stages_completed: [...stagesCompleted],
     artifacts: {
       report_json: "scout_report.json",

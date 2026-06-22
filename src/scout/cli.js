@@ -59,6 +59,7 @@ import {
 } from "./network-design.js";
 import { resolveDiscoveryIntent } from "./profiles.js";
 import { executeWorkflow, loadSessionManifest } from "./workflow.js";
+import { resolveWorkflowPreset } from "./session.js";
 
 async function main(argv) {
   const [command, ...args] = argv;
@@ -119,8 +120,13 @@ async function main(argv) {
     return handoffCommand(args);
   }
   if (command === "test-policy") {
-    console.log("Policy tests are available through npm test.");
-    return 0;
+    const { spawnSync } = await import("node:child_process");
+    const result = spawnSync(
+      process.execPath,
+      ["--test", "src/scout/__tests__/policy.test.js"],
+      { stdio: "inherit", cwd: process.cwd() },
+    );
+    return result.status ?? 1;
   }
 
   throw new Error(`Unknown command: ${command}`);
@@ -311,7 +317,14 @@ async function handoffCommand(args) {
     throw new Error("handoff requires --report <report.json>.");
   }
   const report = await loadReport(reportPath);
-  const handoff = exportHandoffPackages(report, { shortlistLimit: readLimit(readArg(args, "--shortlist-limit", "10")) });
+  const sessionDir = readArg(args, "--session", null);
+  const handoff = exportHandoffPackages(report, {
+    shortlistLimit: readLimit(readArg(args, "--shortlist-limit", "10")),
+    reportPath,
+    sessionDir,
+    handoffMode: readArg(args, "--handoff-mode", null) ?? undefined,
+    workflowPresetEffective: readArg(args, "--workflow-preset", "fast"),
+  });
   await writeFile(jsonOut, JSON.stringify(handoff, null, 2), "utf8");
   console.log(`Scout handoff package written to ${jsonOut}`);
   return 0;
@@ -557,11 +570,16 @@ async function workflow(args) {
     const reportPath = join(sessionDir, manifest.artifacts?.report_json ?? "scout_report.json");
     const report = await loadReport(reportPath);
     const shortlistLimit = readLimit(readArg(args, "--shortlist-limit", "10"));
+    const staticLimit = readLimit(readArg(args, "--static-limit", String(shortlistLimit)));
     await executeWorkflow({
       outDir: sessionDir,
       profileModel,
       report,
       shortlistLimit,
+      staticLimit,
+      fetchArchives: Boolean(manifest.static_fetch_archives),
+      workflowPresetRequested: manifest.workflow_preset_requested,
+      workflowPresetEffective: manifest.workflow_preset_effective,
       resume: true,
       existingManifest: manifest,
       renderAgentSummary,
@@ -575,8 +593,9 @@ async function workflow(args) {
   }
   const profileName = readArg(args, "--profile", "default");
   const outDir = readArg(args, "--out-dir", "scout_session");
-  const through = readArg(args, "--through", null);
   const shortlistLimit = readLimit(readArg(args, "--shortlist-limit", "10"));
+  const staticLimit = readLimit(readArg(args, "--static-limit", String(shortlistLimit)));
+  const workflowOptions = resolveWorkflowRunOptions(args);
   const profileModel = await loadProfileOrDefault(profileName);
   const policy = defaultPolicy("metadata_only");
   const discoveryOptions = readDiscoveryOptions(args);
@@ -586,13 +605,56 @@ async function workflow(args) {
     outDir,
     profileModel,
     report,
-    through,
+    through: workflowOptions.through,
     shortlistLimit,
+    staticLimit,
+    fetchArchives: workflowOptions.fetchArchives,
+    workflowPresetRequested: workflowOptions.presetRequested,
+    workflowPresetEffective: workflowOptions.presetEffective,
     renderAgentSummary,
     createNextActions,
   });
   console.log(`Scout workflow artifacts written to ${outDir}`);
   return 0;
+}
+
+function resolveWorkflowRunOptions(args) {
+  const hasThrough = args.includes("--through");
+  const hasPresetArg = args.includes("--workflow-preset");
+  const hasToken = Boolean(process.env.GITHUB_TOKEN || process.env.GH_TOKEN);
+  const explicitFetchArchives = readFlag(args, "--fetch-archives");
+
+  let presetRequested = hasPresetArg
+    ? readArg(args, "--workflow-preset", null)
+    : hasThrough
+      ? null
+      : hasToken
+        ? "full"
+        : "fast";
+
+  let presetEffective = presetRequested;
+  if (presetRequested === "full" && !hasToken) {
+    console.error(
+      "Warning: workflow preset 'full' requires GITHUB_TOKEN or GH_TOKEN for archive fetch; falling back to 'fast'.",
+    );
+    presetEffective = "fast";
+  }
+
+  const through = hasThrough
+    ? readArg(args, "--through", null)
+    : presetEffective
+      ? resolveWorkflowPreset(presetEffective)
+      : null;
+
+  const stages = through ? through.split(",").map((item) => item.trim()) : [];
+  const fetchArchives = explicitFetchArchives || presetEffective === "full" || stages.includes("static");
+
+  return {
+    through,
+    presetRequested,
+    presetEffective,
+    fetchArchives: Boolean(fetchArchives),
+  };
 }
 
 async function buildReport({ policy, limit, queries, profile = null, discoveryOptions = {} }) {
@@ -851,10 +913,14 @@ function createNextActions(report) {
 function printWorkflowHelp() {
   console.log(`Scout workflow
 
-  scout workflow run --profile <id> --out-dir <dir> [--through discover,static,cockpit,handoff] [--shortlist-limit N] [--no-cache] [--enrich-mode auto|rest|graphql]
-  scout workflow resume --session <dir> [--shortlist-limit N]
+  scout workflow run --profile <id> --out-dir <dir> [--workflow-preset fast|full] [--through discover,static,cockpit,handoff] [--shortlist-limit N] [--static-limit N] [--fetch-archives] [--no-cache] [--enrich-mode auto|rest|graphql]
+  scout workflow resume --session <dir> [--shortlist-limit N] [--static-limit N]
 
-Stages: discover, static (manifest-only), cockpit, handoff`);
+Presets:
+  fast (default without token): discover,cockpit,handoff — metadata-only handoff
+  full (default with GITHUB_TOKEN/GH_TOKEN): discover,static,cockpit,handoff — archive-backed static evidence
+
+Stages: discover, static (archive fetch when preset=full or --fetch-archives), cockpit, handoff`);
 }
 
 function printPlanHelp() {
@@ -885,7 +951,7 @@ Agent-facing CLI commands:
   scout profile create beginner-python-ts --intent beginner
   scout profile run beginner-python-ts --out scout_report.md
   scout monitor --profile beginner-python-ts --skip-known --notify --out scout_watch_report.md
-  scout workflow run --profile beginner-python-ts --out-dir scout_session --through discover,cockpit,handoff
+  scout workflow run --profile beginner-python-ts --out-dir scout_session --workflow-preset full
   scout workflow resume --session scout_session
   scout cockpit --report scout_report.json
   scout handoff --report scout_report.json --json-out handoff_package.json

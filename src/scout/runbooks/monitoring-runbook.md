@@ -13,7 +13,17 @@ Re-run saved candidate profiles on a schedule and report meaningful changes acro
 
 ## Notes
 - `--skip-known` reuses unchanged candidates from the last snapshot (fewer GitHub API calls).
-- `--notify` prints `SCOUT_MONITOR profile=... new=N improved=N ...` for schedulers.
+- `--notify` is a **stdout hook only** — prints one line such as `SCOUT_MONITOR profile=... new=N improved=N ...` for schedulers. Scout does not send webhooks or Slack messages directly.
 - Exit code **1** when new or improved candidates appear.
-- Example scheduler script: `scripts/monitor.ps1`
+- Example scheduler script: `scripts/monitor.ps1` (Windows Task Scheduler).
+- Webhook example wrapper (run after monitor, on exit code 1):
+
+```powershell
+node src/scout/cli.js monitor --profile beginner-python-ts --skip-known --notify
+if ($LASTEXITCODE -eq 1) {
+  Invoke-RestMethod -Method Post -Uri $env:SCOUT_WEBHOOK_URL -Body '{"source":"scout-monitor"}'
+}
+```
+
 - Profiles retain `discovery_intent`; beginner and rewarded monitors use the same pipeline with intent-aware triage.
+- Follow-up on actionable events: `scout workflow run --workflow-preset fast` for a quick cockpit/handoff refresh.

@@ -76,6 +76,7 @@ export function extractRewardSignals(candidate, issueBody = "") {
   return {
     reward_signals: deduped,
     has_verified_reward_signal: hasVerified,
+    has_observed_reward_metadata: hasVerified,
     has_inferred_reward_signal: hasInferred,
     estimated_reward_usd: estimatedRewardUsd,
     source_observations: deduped.map((signal) => ({

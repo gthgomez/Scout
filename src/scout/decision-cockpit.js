@@ -35,6 +35,7 @@ export function createDecisionCockpitModel(report) {
         discovery_intent: decision.discovery_intent ?? discoveryIntent,
         income_summary: decision.income_summary ?? null,
         confidence,
+        reward_signal_label: formatRewardSignalLabel(confidence.reward_signal),
         why_not_green: whyNotGreen({ candidate, decision, confidence, discoveryIntent }),
         what_would_change_my_mind: whatWouldChangeMyMind({ decision, confidence, discoveryIntent }),
         next_evidence_action: nextEvidenceAction(candidate, decision),
@@ -47,30 +48,42 @@ export function createDecisionCockpitModel(report) {
 export function exportHandoffPackages(report, options = {}) {
   const model = createDecisionCockpitModel(report);
   const shortlistLimit = options.shortlistLimit ?? 10;
+  const workflowPreset = options.workflowPresetEffective ?? "fast";
+  const handoffMode = options.handoffMode ?? (workflowPreset === "full" ? "static_verified" : "metadata_only");
+  const reportPath = options.reportPath ?? "scout_report.json";
   const candidateById = new Map((report?.candidates ?? []).map((candidate) => [candidate.candidate_id, candidate]));
   const recommended = model.candidates
-    .filter((item) => ["GREEN", "YELLOW"].includes(item.verdict))
+    .filter((item) => isRecommendablePackage(item, { handoffMode, workflowPreset }))
     .filter((item) => {
       if (!report?.profile?.require_verified_reward) return true;
-      return Boolean(candidateById.get(item.candidate_id)?.has_verified_reward_signal);
+      const candidate = candidateById.get(item.candidate_id);
+      return Boolean(candidate?.has_verified_reward_signal ?? candidate?.has_observed_reward_metadata);
     })
     .sort((a, b) => (a.rank ?? 999) - (b.rank ?? 999))
     .slice(0, shortlistLimit)
     .map((item) => item.candidate_id);
 
-  const packages = model.candidates.map((item) => ({
-    candidate_id: item.candidate_id,
-    verdict: item.verdict,
-    discovery_intent: item.discovery_intent,
-    income_summary: item.income_summary,
-    ...item.handoff_package,
-  }));
+  const packages = model.candidates.map((item) => {
+    const candidate = candidateById.get(item.candidate_id);
+    return {
+      candidate_id: item.candidate_id,
+      verdict: item.verdict,
+      discovery_intent: item.discovery_intent,
+      income_summary: item.income_summary,
+      has_observed_reward_metadata: Boolean(
+        candidate?.has_observed_reward_metadata ?? candidate?.has_verified_reward_signal,
+      ),
+      ...item.handoff_package,
+    };
+  });
 
   return {
     schema_version: "1.1",
     entrypoint: "handoff_package.json",
     generated_at: model.generated_at,
     discovery_intent: model.discovery_intent,
+    handoff_mode: handoffMode,
+    workflow_preset: workflowPreset,
     reward_disclaimer:
       model.discovery_intent === "rewarded"
         ? "Scout does not verify payout amounts, bounty platform terms, or sponsor obligations."
@@ -78,18 +91,50 @@ export function exportHandoffPackages(report, options = {}) {
     recommended_packages: recommended,
     suggested_commands: recommended.map((candidateId) => ({
       kind: "readonly_cli",
-      command: `scout explain --candidate-id ${candidateId} --report scout_report.json`,
+      command: `scout explain --candidate-id ${candidateId} --report ${reportPath}`,
+      cwd: options.sessionDir ?? null,
       reason: "Review evidence-backed verdict reasoning before any engagement.",
     })),
     packages,
   };
 }
 
-export function renderDecisionCockpitSection(model) {
+function isRecommendablePackage(item, { handoffMode, workflowPreset }) {
+  if (["RED", "GRAY"].includes(item.verdict)) return false;
+
+  const hasStaticEvidence = item.confidence.static_evidence !== "low";
+
+  if (workflowPreset === "fast" || handoffMode === "metadata_only") {
+    if (item.verdict === "GREEN") return true;
+    if (item.verdict === "YELLOW" && hasStaticEvidence) return true;
+    return false;
+  }
+
+  if (item.verdict === "GREEN") return true;
+  if (item.verdict === "YELLOW" && hasStaticEvidence) return true;
+  return false;
+}
+
+export function renderDecisionCockpitSection(model, options = {}) {
+  const workflowPreset = options.workflowPresetEffective ?? "fast";
+  const staticFetchArchives = options.staticFetchArchives ?? false;
+  const lines = ["## Scout Decision Cockpit", ""];
+
+  if (shouldShowMetadataOnlyBanner(model, { workflowPreset, staticFetchArchives })) {
+    lines.push(
+      "> **Metadata-only handoff warning:** This session skipped archive-backed static inspection (fast preset or no GitHub token). Recommended packages may lack setup-file evidence. Run `scout workflow run --workflow-preset full` before coding-agent handoff.",
+      "",
+    );
+  }
+
   const rows = model.candidates.map((item) => {
-    const confidence = CONFIDENCE_CATEGORIES
-      .map((category) => `${category}:${item.confidence[category]}`)
-      .join(", ");
+    const confidence = CONFIDENCE_CATEGORIES.map((category) => {
+      const value = item.confidence[category];
+      if (category === "reward_signal" && value === "high") {
+        return `${category}:${value} (observed in metadata)`;
+      }
+      return `${category}:${value}`;
+    }).join(", ");
     return [
       `### ${item.candidate_id}`,
       "",
@@ -106,13 +151,27 @@ export function renderDecisionCockpitSection(model) {
       `- Handoff denied actions: ${item.handoff_package.denied_actions.join(", ")}`,
     ].join("\n");
   });
-  return ["## Scout Decision Cockpit", "", ...rows].join("\n");
+  return [...lines, ...rows].join("\n");
+}
+
+function shouldShowMetadataOnlyBanner(model, { workflowPreset, staticFetchArchives }) {
+  if (workflowPreset === "full" && staticFetchArchives) return false;
+  const recommended = model.candidates.filter((item) => ["GREEN", "YELLOW"].includes(item.verdict));
+  if (recommended.length === 0) return false;
+  return recommended.every((item) => item.confidence.static_evidence === "low");
+}
+
+function formatRewardSignalLabel(rewardSignal) {
+  if (rewardSignal === "high") return "observed in metadata";
+  if (rewardSignal === "medium") return "inferred in metadata";
+  if (rewardSignal === "none") return "none";
+  return "n/a";
 }
 
 function confidenceFor({ candidate, decision, evidence, attempts, discoveryIntent }) {
   const rewardSignal = (() => {
     if (discoveryIntent !== "rewarded") return "n/a";
-    if (candidate?.has_verified_reward_signal) return "high";
+    if (candidate?.has_verified_reward_signal || candidate?.has_observed_reward_metadata) return "high";
     if (candidate?.has_inferred_reward_signal) return "medium";
     return "none";
   })();
@@ -170,6 +229,9 @@ function buildHandoffPackage({ candidate, decision, evidence, discoveryIntent })
     discovery_intent: discoveryIntent,
     income_summary: decision.income_summary ?? null,
     reward_signals: candidate?.reward_signals ?? [],
+    has_observed_reward_metadata: Boolean(
+      candidate?.has_observed_reward_metadata ?? candidate?.has_verified_reward_signal,
+    ),
     evidence_ids: evidence.map((item) => item.evidence_id),
     risks: [decision.risk_summary, decision.drop_reason].filter(Boolean),
     denied_commands: deniedCommands(candidate),

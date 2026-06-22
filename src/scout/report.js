@@ -222,7 +222,7 @@ export function explainCandidate(report, candidateId) {
   return lines.join("\n");
 }
 
-export function exportShortlist(report, options = {}) {
+export function selectShortlistDecisions(report, options = {}) {
   validateReportModel(report);
 
   const limit = Number.parseInt(options.limit ?? "50", 10);
@@ -230,7 +230,7 @@ export function exportShortlist(report, options = {}) {
   const allowedVerdicts = new Set(profile.shortlist_verdicts ?? ["GREEN", "YELLOW", "GRAY"]);
   const byId = candidateById(report.candidates);
 
-  const shortlist = shortlistDecisions(report.decisions)
+  return shortlistDecisions(report.decisions)
     .filter((decision) => decision.verdict !== "RED" && allowedVerdicts.has(decision.verdict))
     .filter((decision) => {
       if (!profile.require_verified_reward) return true;
@@ -238,6 +238,11 @@ export function exportShortlist(report, options = {}) {
       return Boolean(candidate?.has_verified_reward_signal);
     })
     .slice(0, Number.isFinite(limit) && limit > 0 ? limit : 50);
+}
+
+export function exportShortlist(report, options = {}) {
+  const shortlist = selectShortlistDecisions(report, options);
+  const byId = candidateById(report.candidates);
 
   const discoveryIntent = report.discovery_intent ?? report.decisions[0]?.discovery_intent ?? "beginner";
   const lines = ["# Scout Shortlist", "", `Generated: ${new Date().toISOString()}`, "", `Discovery intent: ${discoveryIntent}`, "", `Candidates: ${shortlist.length}`, ""];

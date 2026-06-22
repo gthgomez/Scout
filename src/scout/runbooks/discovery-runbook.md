@@ -29,10 +29,13 @@ Find and shortlist contribution candidates using GitHub metadata only, then hand
 - `github_pr_open`
 
 ## Expected Scout CLI backend calls
-Use `scout --help` for the top-level command list. Subcommands do not provide separate `--help` output.
+Subcommand help: `scout workflow --help`, `scout plan --help`, `scout probe --help`. Top-level: `scout --help`.
 
-- `scout workflow run --profile <profile-id> --out-dir <dir> [--through discover,cockpit,handoff] [--shortlist-limit N]`
+- `scout workflow run --profile <profile-id> --out-dir <dir> [--workflow-preset fast|full] [--through discover,static,cockpit,handoff] [--shortlist-limit N] [--static-limit N] [--fetch-archives]`
   - preferred agent-facing entrypoint; writes session manifest, reports, handoff schema 1.1
+  - **fast** preset: `discover,cockpit,handoff` (metadata-only handoff)
+  - **full** preset: `discover,static,cockpit,handoff` (shortlist archive fetch; requires `GITHUB_TOKEN` or `GH_TOKEN`)
+  - default preset: `full` when token present, else `fast`
 - `scout workflow resume --session <dir>`
 - `scout profile create beginner-python-ts --intent beginner`
 - `scout profile create rewarded-typescript --intent rewarded --trusted-seed-lists rewarded-programs`
@@ -43,8 +46,9 @@ Use `scout --help` for the top-level command list. Subcommands do not provide se
 
 ## Output expectations
 - Reports include `discovery_intent`, reward signal fields for rewarded profiles, and intent-specific shortlist columns.
-- Rewarded candidates include `reward_signals`, `has_verified_reward_signal`, `has_inferred_reward_signal`, and optional `estimated_reward_usd` (inferred only).
+- Rewarded candidates include `reward_signals`, `has_verified_reward_signal`, `has_observed_reward_metadata`, `has_inferred_reward_signal`, and optional `estimated_reward_usd` (inferred only).
 - Discovery-only candidates without setup evidence must not be promoted to `GREEN` in beginner mode; rewarded mode may surface `GRAY` with `REWARD_GAP` when no reward signal exists.
+- `scout_session.json` records `workflow_preset_requested`, `workflow_preset_effective`, and `static_fetch_archives`.
 
 ## Safety stops
 - Stop if any denied operation is attempted.
