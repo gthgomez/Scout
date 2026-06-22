@@ -21,6 +21,7 @@ import {
   resolvePendingStages,
   sessionManifestPath,
 } from "./session.js";
+import { validateSessionManifest } from "./validators.js";
 
 export async function loadSessionManifest(outDir) {
   const raw = await readFile(sessionManifestPath(outDir), "utf8");
@@ -29,7 +30,8 @@ export async function loadSessionManifest(outDir) {
 
 export async function saveSessionManifest(outDir, manifest) {
   await mkdir(outDir, { recursive: true });
-  await writeFile(sessionManifestPath(outDir), JSON.stringify(manifest, null, 2), "utf8");
+  const validated = validateSessionManifest(manifest);
+  await writeFile(sessionManifestPath(outDir), JSON.stringify(validated, null, 2), "utf8");
 }
 
 export async function runWorkflowStage(stage, context) {

@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/gthgomez/Scout/schemas/scout-session-1.0.json",
+  "title": "Scout Session Manifest",
+  "description": "Workflow session state written to scout_session.json by scout workflow run.",
+  "type": "object",
+  "required": [
+    "session_id",
+    "profile",
+    "workflow_preset_requested",
+    "workflow_preset_effective",
+    "static_fetch_archives",
+    "stages_completed",
+    "artifacts",
+    "generated_at"
+  ],
+  "properties": {
+    "session_id": { "type": "string", "minLength": 1 },
+    "profile": { "type": "object" },
+    "workflow_preset_requested": { "type": ["string", "null"], "enum": ["fast", "full", null] },
+    "workflow_preset_effective": { "type": ["string", "null"], "enum": ["fast", "full", null] },
+    "static_fetch_archives": { "type": "boolean" },
+    "stages_completed": {
+      "type": "array",
+      "items": { "enum": ["discover", "static", "cockpit", "handoff"] }
+    },
+    "artifacts": {
+      "type": "object",
+      "required": [
+        "report_json",
+        "report_md",
+        "shortlist_md",
+        "agent_summary_md",
+        "handoff_json"
+      ],
+      "properties": {
+        "report_json": { "type": "string" },
+        "report_md": { "type": "string" },
+        "shortlist_md": { "type": "string" },
+        "agent_summary_md": { "type": "string" },
+        "handoff_json": { "type": "string" },
+        "static_report_json": { "type": "string" },
+        "static_report_md": { "type": "string" },
+        "cockpit_json": { "type": "string" },
+        "cockpit_md": { "type": "string" }
+      },
+      "additionalProperties": { "type": "string" }
+    },
+    "generated_at": { "type": "string", "format": "date-time" }
+  }
+}

@@ -938,7 +938,7 @@ function printProbeHelp() {
 }
 
 function printHelp() {
-  console.log(`Scout 0.3.x
+  console.log(`Scout 0.4.x
 
 Agent-facing CLI commands:
   scout run --safe --limit 50 --out scout_report.md
@@ -951,6 +951,7 @@ Agent-facing CLI commands:
   scout profile create beginner-python-ts --intent beginner
   scout profile run beginner-python-ts --out scout_report.md
   scout monitor --profile beginner-python-ts --skip-known --notify --out scout_watch_report.md
+  scout workflow run --profile beginner-python-ts --out-dir scout_session
   scout workflow run --profile beginner-python-ts --out-dir scout_session --workflow-preset full
   scout workflow resume --session scout_session
   scout cockpit --report scout_report.json
@@ -959,7 +960,9 @@ Agent-facing CLI commands:
 
 Subcommand help: scout workflow --help | scout plan --help | scout probe --help
 
+Artifact schemas: schemas/README.md
 Discovery intents: beginner | rewarded
+Workflow presets: fast (metadata-only handoff) | full (archive-backed static)
 Performance: --no-cache, --enrich-mode auto|rest|graphql, SCOUT_GITHUB_CONCURRENCY`);
 }
 

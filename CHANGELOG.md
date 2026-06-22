@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.4.1] — Schemas + doc polish
+
+### Added
+- [`schemas/scout-report-1.0.json`](schemas/scout-report-1.0.json) and [`schemas/scout-session-1.0.json`](schemas/scout-session-1.0.json)
+- [`schemas/README.md`](schemas/README.md) — schema index and runtime validator map
+- `validateSessionManifest()` — validates `scout_session.json` on save
+- [`CONTRIBUTING.md`](CONTRIBUTING.md) — local CI, PR flow, self-hosted runner setup
+
+### Changed
+- README, PROJECT_CONTEXT, AGENTS, runbooks: artifact contract, CLI table, `repo_size_filter` semantics, schema links
+- `.env.example` — optional `SCOUT_*` and `SCOUT_WEBHOOK_URL` (wrapper-only)
+- `scout --help` banner updated to 0.4.x
+- Removed deprecated `codex-*-agent.md` runbook redirect stubs
+
+### Deferred
+- OpenClaw/Slack native monitor notifications
+
 ## [0.4.0] — Handoff schema + seed filters
 
 ### Added

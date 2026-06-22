@@ -14,9 +14,11 @@ import {
   validateSearchProfile,
   validateSetupIntelligence,
   validateHandoffPackage,
+  validateSessionManifest,
   validateTriageDecision,
 } from "../validators.js";
 import { exportHandoffPackages } from "../decision-cockpit.js";
+import { createSessionManifest } from "../session.js";
 
 const fixturePath = join(dirname(fileURLToPath(import.meta.url)), "fixtures");
 const monitoring = JSON.parse(readFileSync(join(fixturePath, "monitoring.json"), "utf8"));
@@ -360,5 +362,36 @@ describe("validators", () => {
     });
     assert.equal(validateHandoffPackage(handoff).schema_version, "1.1");
     assert.throws(() => validateHandoffPackage({ ...handoff, schema_version: "9.9" }), /schema_version/);
+  });
+
+  it("validates session manifest exports", () => {
+    const manifest = createSessionManifest({
+      sessionId: "scout_session",
+      profile: { name: "beginner-python-ts" },
+      stagesCompleted: ["discover"],
+      workflowPresetRequested: "full",
+      workflowPresetEffective: "full",
+      staticFetchArchives: true,
+    });
+    assert.equal(validateSessionManifest(manifest).session_id, "scout_session");
+    assert.throws(
+      () => validateSessionManifest({ ...manifest, stages_completed: ["invalid"] }),
+      /stages_completed/,
+    );
+  });
+
+  it("validates fixture report model against report contract", () => {
+    const report = validateReportModel({
+      ...reports.validReport,
+      generated_at: "2026-06-01T00:00:00.000Z",
+      discovery_intent: "beginner",
+      runtime_safety_status: "No unapproved operations.",
+      triage_config: {
+        profile_id: "profile-test",
+        threshold_overrides: {},
+        effective_thresholds: { green_min_score: 30 },
+      },
+    });
+    assert.equal(report.run_status, "complete");
   });
 });

@@ -1,6 +1,6 @@
 {
   "name": "scout",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "private": true,
   "type": "module",
   "description": "Policy-enforced, agent-agnostic open-source contribution discovery tool for AI agent harnesses.",
