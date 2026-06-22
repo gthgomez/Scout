@@ -30,6 +30,10 @@ Moved from the former `codex-static-inspection-agent.md`. See that stub for the 
 - `scout inspect --report <report.json> --manifest <manifest.json>`
 - `scout inspect --report <report.json> --fetch-archives`
 - `scout validate-report --report <updated-report.json>`
+- `scout workflow run --workflow-preset full` — runs static archive fetch automatically for the workflow shortlist (no separate static stage needed when using full preset)
+
+## Workflow note
+`scout workflow run --workflow-preset full` includes the static stage with shortlist-scoped archive fetch before cockpit and handoff. If archive fetch fails for all shortlist candidates, handoff remains `metadata_only` despite the full preset.
 
 ## Safety stops
 - Never execute README install commands.

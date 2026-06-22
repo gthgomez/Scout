@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.3.4] — Handoff mode from evidence
+
+### Fixed
+- `handoff_mode` now reflects archive-backed static evidence outcomes, not fetch intent — full preset with failed or insufficient archives yields `metadata_only`
+- Cockpit metadata-only banner shows when `handoff_mode` is `metadata_only` even after a full preset attempt
+
+### Added
+- `deriveHandoffMode()` helper and `handoff_mode_reason` on `handoff_package.json` when mode is `metadata_only`
+
+### Changed
+- Runbooks: decision cockpit, report review, and static inspection updated for 0.3.3+ workflow preset and handoff semantics
+- Docs: `handoff_mode` derived from evidence, not preset alone
+
 ## [0.3.3] — Workflow presets + handoff honesty
 
 ### Added

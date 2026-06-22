@@ -5,6 +5,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   createDecisionCockpitModel,
+  deriveHandoffMode,
   exportHandoffPackages,
   renderDecisionCockpitSection,
 } from "../decision-cockpit.js";
@@ -131,11 +132,64 @@ describe("R2G decision cockpit reports", () => {
 
     const fullHandoff = exportHandoffPackages(report, {
       workflowPresetEffective: "full",
-      handoffMode: "static_verified",
+      staticFetchArchives: true,
     });
     assert.equal(fullHandoff.handoff_mode, "static_verified");
+    assert.equal(fullHandoff.handoff_mode_reason, null);
     assert.ok(fullHandoff.recommended_packages.includes("SCOUT-alpha-green-1"));
     assert.ok(!fullHandoff.recommended_packages.includes("SCOUT-gray"));
+  });
+
+  it("derives handoff mode from static evidence, not preset intent", () => {
+    const report = {
+      ...reportFixtures.validReport,
+      evidence: [],
+      decisions: [
+        {
+          ...reportFixtures.validReport.decisions[0],
+          verdict: "GREEN",
+        },
+      ],
+    };
+
+    const fastDerived = deriveHandoffMode(report, { staticFetchArchives: false });
+    assert.equal(fastDerived.handoffMode, "metadata_only");
+    assert.ok(fastDerived.handoffModeReason.includes("not attempted"));
+
+    const fullFailed = deriveHandoffMode(report, { staticFetchArchives: true });
+    assert.equal(fullFailed.handoffMode, "metadata_only");
+    assert.ok(fullFailed.handoffModeReason.includes("archive fetch"));
+
+    const fullSucceeded = deriveHandoffMode(reportFixtures.validReport, { staticFetchArchives: true });
+    assert.equal(fullSucceeded.handoffMode, "static_verified");
+    assert.equal(fullSucceeded.handoffModeReason, null);
+
+    const fullHandoffExport = exportHandoffPackages(report, {
+      workflowPresetEffective: "full",
+      staticFetchArchives: true,
+    });
+    assert.equal(fullHandoffExport.handoff_mode, "metadata_only");
+    assert.ok(fullHandoffExport.handoff_mode_reason);
+  });
+
+  it("shows metadata-only banner after full preset when static evidence is still low", () => {
+    const report = {
+      ...reportFixtures.validReport,
+      evidence: [],
+      decisions: [
+        {
+          ...reportFixtures.validReport.decisions[0],
+          verdict: "GREEN",
+        },
+      ],
+    };
+    const model = createDecisionCockpitModel(report);
+    const output = renderDecisionCockpitSection(model, {
+      workflowPresetEffective: "full",
+      staticFetchArchives: true,
+    });
+    assert.ok(output.includes("Metadata-only handoff warning"));
+    assert.ok(output.includes("archive fetch"));
   });
 
   it("shows metadata-only banner when static evidence is low for all recommended candidates", () => {

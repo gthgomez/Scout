@@ -4,7 +4,7 @@ Scout is a policy-enforced, agent-agnostic local tool for finding open-source co
 
 Policy gates **Scout CLI operations** (allowed/denied commands per runbook role). Agent harnesses must follow runbooks; Scout does not enforce policy inside external coding agents.
 
-**Current release: 0.3.3** — workflow presets (fast/full), archive-backed static stage, and handoff honesty.
+**Current release: 0.3.4** — workflow presets (fast/full), evidence-derived `handoff_mode`, and archive-backed static stage.
 
 ## Prerequisites
 
@@ -81,7 +81,7 @@ Exit code **1** when new or improved candidates appear (for schedulers). `--noti
 
 1. Start with small `--max-candidates` (15–20)
 2. Use `workflow run` (token → full preset) before any coding-agent session
-3. Read `handoff_package.json` and check `handoff_mode` (`metadata_only` vs `static_verified`)
+3. Read `handoff_package.json` and check `handoff_mode` (`metadata_only` vs `static_verified`) and `handoff_mode_reason` when metadata-only
 4. Schedule weekly `monitor --skip-known` instead of full rediscovery
 
 ## CI

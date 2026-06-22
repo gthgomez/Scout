@@ -6,7 +6,7 @@ Scout is a policy-enforced backend for finding open-source contribution candidat
 
 Policy gates **Scout CLI operations** only; harnesses must follow runbooks for allowed/denied actions outside Scout.
 
-Current release: **0.3.3** on `main`.
+Current release: **0.3.4** on `main`.
 
 ## Discovery Intents
 
@@ -45,7 +45,7 @@ CLI: `--workflow-preset fast|full`, `--fetch-archives`, `--static-limit N` (defa
 - `handoff_package.json` — **schema 1.1** primary agent entrypoint (`handoff_mode`, `recommended_packages`)
 - `scout_cockpit.json` when cockpit stage runs
 
-Handoff 1.1 adds `handoff_mode` (`metadata_only` | `static_verified`), `recommended_packages`, `suggested_commands`, `schema_version`.
+Handoff 1.1 adds `handoff_mode` (`metadata_only` | `static_verified`, derived from archive-backed static evidence when static stage ran), `handoff_mode_reason` when metadata-only, `recommended_packages`, `suggested_commands`, `schema_version`.
 
 See [`AGENTS.md`](AGENTS.md) for harness routing.
 

@@ -45,11 +45,54 @@ export function createDecisionCockpitModel(report) {
   };
 }
 
+export function deriveHandoffMode(report, options = {}) {
+  const model = options.model ?? createDecisionCockpitModel(report);
+  const staticFetchAttempted = options.staticFetchArchives ?? false;
+  const shortlistLimit = options.shortlistLimit ?? 10;
+
+  const shortlistCandidates = model.candidates
+    .filter((item) => ["GREEN", "YELLOW"].includes(item.verdict))
+    .sort((a, b) => (a.rank ?? 999) - (b.rank ?? 999))
+    .slice(0, shortlistLimit);
+
+  const hasVerifiedStaticEvidence = shortlistCandidates.some(
+    (item) => item.confidence.static_evidence !== "low",
+  );
+
+  if (staticFetchAttempted && hasVerifiedStaticEvidence) {
+    return {
+      handoffMode: "static_verified",
+      handoffModeReason: null,
+    };
+  }
+
+  const handoffModeReason = staticFetchAttempted
+    ? "Full preset ran archive fetch but no shortlist candidate has archive-backed static evidence (all fetches failed or insufficient)."
+    : "Archive-backed static inspection was not attempted (fast preset or static stage skipped).";
+
+  return {
+    handoffMode: "metadata_only",
+    handoffModeReason,
+  };
+}
+
 export function exportHandoffPackages(report, options = {}) {
   const model = createDecisionCockpitModel(report);
   const shortlistLimit = options.shortlistLimit ?? 10;
   const workflowPreset = options.workflowPresetEffective ?? "fast";
-  const handoffMode = options.handoffMode ?? (workflowPreset === "full" ? "static_verified" : "metadata_only");
+  const derived =
+    options.handoffMode !== undefined
+      ? {
+          handoffMode: options.handoffMode,
+          handoffModeReason: options.handoffModeReason ?? null,
+        }
+      : deriveHandoffMode(report, {
+          model,
+          staticFetchArchives: options.staticFetchArchives ?? false,
+          shortlistLimit,
+        });
+  const handoffMode = derived.handoffMode;
+  const handoffModeReason = derived.handoffModeReason;
   const reportPath = options.reportPath ?? "scout_report.json";
   const candidateById = new Map((report?.candidates ?? []).map((candidate) => [candidate.candidate_id, candidate]));
   const recommended = model.candidates
@@ -83,6 +126,7 @@ export function exportHandoffPackages(report, options = {}) {
     generated_at: model.generated_at,
     discovery_intent: model.discovery_intent,
     handoff_mode: handoffMode,
+    handoff_mode_reason: handoffModeReason,
     workflow_preset: workflowPreset,
     reward_disclaimer:
       model.discovery_intent === "rewarded"
@@ -118,11 +162,16 @@ function isRecommendablePackage(item, { handoffMode, workflowPreset }) {
 export function renderDecisionCockpitSection(model, options = {}) {
   const workflowPreset = options.workflowPresetEffective ?? "fast";
   const staticFetchArchives = options.staticFetchArchives ?? false;
+  const { handoffMode, handoffModeReason } = deriveHandoffMode(null, {
+    model,
+    staticFetchArchives,
+  });
   const lines = ["## Scout Decision Cockpit", ""];
 
-  if (shouldShowMetadataOnlyBanner(model, { workflowPreset, staticFetchArchives })) {
+  if (shouldShowMetadataOnlyBanner(model, { handoffMode })) {
+    const detail = metadataOnlyBannerDetail({ workflowPreset, staticFetchArchives, handoffModeReason });
     lines.push(
-      "> **Metadata-only handoff warning:** This session skipped archive-backed static inspection (fast preset or no GitHub token). Recommended packages may lack setup-file evidence. Run `scout workflow run --workflow-preset full` before coding-agent handoff.",
+      `> **Metadata-only handoff warning:** ${detail} Recommended packages may lack setup-file evidence before coding-agent handoff.`,
       "",
     );
   }
@@ -154,11 +203,19 @@ export function renderDecisionCockpitSection(model, options = {}) {
   return [...lines, ...rows].join("\n");
 }
 
-function shouldShowMetadataOnlyBanner(model, { workflowPreset, staticFetchArchives }) {
-  if (workflowPreset === "full" && staticFetchArchives) return false;
+function shouldShowMetadataOnlyBanner(model, { handoffMode }) {
+  if (handoffMode === "static_verified") return false;
   const recommended = model.candidates.filter((item) => ["GREEN", "YELLOW"].includes(item.verdict));
   if (recommended.length === 0) return false;
   return recommended.every((item) => item.confidence.static_evidence === "low");
+}
+
+function metadataOnlyBannerDetail({ workflowPreset, staticFetchArchives, handoffModeReason }) {
+  if (handoffModeReason) return handoffModeReason;
+  if (workflowPreset === "full" && staticFetchArchives) {
+    return "Full preset ran but no shortlist candidate has archive-backed static evidence.";
+  }
+  return "This session skipped archive-backed static inspection (fast preset or no GitHub token).";
 }
 
 function formatRewardSignalLabel(rewardSignal) {

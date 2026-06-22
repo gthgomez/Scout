@@ -1,7 +1,12 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { defaultPolicy } from "./policy.js";
-import { createDecisionCockpitModel, exportHandoffPackages, renderDecisionCockpitSection } from "./decision-cockpit.js";
+import {
+  createDecisionCockpitModel,
+  deriveHandoffMode,
+  exportHandoffPackages,
+  renderDecisionCockpitSection,
+} from "./decision-cockpit.js";
 import { createReportModel, exportShortlist, renderMarkdownReport, selectShortlistDecisions } from "./report.js";
 import { triageCandidates } from "./triage.js";
 import {
@@ -171,13 +176,18 @@ async function runHandoffStage({
   workflowPresetEffective = "fast",
   staticFetchArchives = false,
 }) {
-  const handoffMode = staticFetchArchives ? "static_verified" : "metadata_only";
+  const { handoffMode, handoffModeReason } = deriveHandoffMode(report, {
+    staticFetchArchives,
+    shortlistLimit,
+  });
   const handoff = exportHandoffPackages(report, {
     shortlistLimit,
     sessionDir: outDir,
     reportPath: join(outDir, "scout_report.json"),
     handoffMode,
+    handoffModeReason,
     workflowPresetEffective,
+    staticFetchArchives,
   });
   await writeFile(join(outDir, "handoff_package.json"), JSON.stringify(handoff, null, 2), "utf8");
   return { report };
