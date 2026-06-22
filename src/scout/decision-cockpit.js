@@ -44,22 +44,44 @@ export function createDecisionCockpitModel(report) {
   };
 }
 
-export function exportHandoffPackages(report) {
+export function exportHandoffPackages(report, options = {}) {
   const model = createDecisionCockpitModel(report);
+  const shortlistLimit = options.shortlistLimit ?? 10;
+  const candidateById = new Map((report?.candidates ?? []).map((candidate) => [candidate.candidate_id, candidate]));
+  const recommended = model.candidates
+    .filter((item) => ["GREEN", "YELLOW"].includes(item.verdict))
+    .filter((item) => {
+      if (!report?.profile?.require_verified_reward) return true;
+      return Boolean(candidateById.get(item.candidate_id)?.has_verified_reward_signal);
+    })
+    .sort((a, b) => (a.rank ?? 999) - (b.rank ?? 999))
+    .slice(0, shortlistLimit)
+    .map((item) => item.candidate_id);
+
+  const packages = model.candidates.map((item) => ({
+    candidate_id: item.candidate_id,
+    verdict: item.verdict,
+    discovery_intent: item.discovery_intent,
+    income_summary: item.income_summary,
+    ...item.handoff_package,
+  }));
+
   return {
+    schema_version: "1.1",
+    entrypoint: "handoff_package.json",
     generated_at: model.generated_at,
     discovery_intent: model.discovery_intent,
     reward_disclaimer:
       model.discovery_intent === "rewarded"
         ? "Scout does not verify payout amounts, bounty platform terms, or sponsor obligations."
         : null,
-    packages: model.candidates.map((item) => ({
-      candidate_id: item.candidate_id,
-      verdict: item.verdict,
-      discovery_intent: item.discovery_intent,
-      income_summary: item.income_summary,
-      ...item.handoff_package,
+    recommended_packages: recommended,
+    suggested_commands: recommended.map((candidateId) => ({
+      kind: "readonly_cli",
+      command: `scout explain --candidate-id ${candidateId} --report scout_report.json`,
+      reason: "Review evidence-backed verdict reasoning before any engagement.",
     })),
+    packages,
   };
 }
 

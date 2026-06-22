@@ -4,73 +4,74 @@
 
 Scout is a policy-enforced backend for finding open-source contribution candidates. It is orchestrated by AI agent harnesses through runbooks and CLI artifacts — not tied to a single vendor runtime.
 
+Current release: **0.3.2** on `main`.
+
 ## Discovery Intents
 
-Scout separates **policy mode** (`metadata_only`, `static_inspection`, `dynamic_probe`) from **discovery intent** (`beginner`, `rewarded`).
-
-| Intent | Mission | Built-in preset |
+| Intent | Mission | Presets |
 | --- | --- | --- |
-| `beginner` | Learning-focused contributions, setup clarity, small scope | `beginner-python-ts` |
-| `rewarded` | Income/bounty metadata from GitHub labels/titles/bodies + seed lists | `rewarded-typescript` |
+| `beginner` | Learning-focused contributions | `beginner-python-ts`, `beginner-docs-only`, `beginner-small-repos` |
+| `rewarded` | Bounty/reward metadata hunts | `rewarded-typescript`, `rewarded-verified-only` |
 
-Profiles missing `discovery_intent` validate as `beginner`.
+## Environment
+
+| Variable | Purpose |
+| --- | --- |
+| `GITHUB_TOKEN` / `GH_TOKEN` | GitHub API access |
+| `SCOUT_SANDBOX_IMAGE` | Docker probe image override |
+| `SCOUT_GITHUB_CONCURRENCY` | Enrichment parallelism (default 4) |
+| `SCOUT_ENRICH_MODE` | `auto`, `rest`, or `graphql` |
+| `SCOUT_CACHE_TTL_SEARCH` | Search cache TTL seconds (default 86400) |
+| `SCOUT_CACHE_TTL_METADATA` | Metadata cache TTL seconds (default 21600) |
 
 ## Agent Artifact Contract
 
-`scout workflow run --out-dir <dir>` writes:
+`scout workflow run --through discover,cockpit,handoff` writes a session bundle including:
 
-- `scout_session.json` — profile snapshot
-- `scout_report.md` / `scout_report.json` — full evidence model
-- `scout_shortlist.md` — ranked shortlist
-- `agent_summary.md` — primary harness summary
-- `codex_summary.md` — deprecated identical compat copy (one release)
-- `handoff_package.json` — external coding-agent handoff (`discovery_intent`, evidence IDs, denied actions)
-- `next_actions.json` — per-candidate recommended actions
+- `scout_session.json` — session manifest with `stages_completed`
+- `scout_report.json` / `scout_report.md`
+- `handoff_package.json` — **schema 1.1** primary agent entrypoint
+- `scout_cockpit.json` when cockpit stage runs
 
-## Supported Harness Examples
+Handoff 1.1 adds `recommended_packages`, `suggested_commands`, `schema_version`.
 
-Cursor, Claude Code, Gemini CLI, Antigravity, Codex, or any tool that can:
+See [`AGENTS.md`](AGENTS.md) for harness routing.
 
-1. Run `node src/scout/cli.js` commands locally
-2. Read Markdown/JSON artifacts from an output directory
-3. Respect Scout policy denials in runbooks
+## CLI Surface
 
-This list is illustrative, not exhaustive.
+| Command | Role |
+| --- | --- |
+| `scout workflow run --through ...` | Multi-stage pipeline |
+| `scout workflow resume --session ...` | Continue incomplete session |
+| `scout discover` / `profile run` | Discovery with `--no-cache`, `--enrich-mode` |
+| `scout monitor --skip-known --notify` | Incremental watch (exit 1 on actionable events) |
+| `scout inspect --candidate-id ...` | Single-candidate static inspect |
+| Other R1–R3 commands | inspect, probe, cockpit, handoff, plan |
 
-## Policy Boundary
+## Repository Layout (0.3.x additions)
 
-Regardless of harness:
+| Path | Role |
+| --- | --- |
+| `src/scout/github-client.js` | HTTP/GraphQL transport, cache, concurrency |
+| `src/scout/github-cache.js` | Disk cache |
+| `src/scout/github-graphql.js` | Batch GraphQL enrichment |
+| `src/scout/candidate-metadata.js` | Shared metadata/reward helpers |
+| `src/scout/async-pool.js` | Bounded concurrency pool |
+| `src/scout/workflow.js` | Pipeline stage orchestration |
+| `src/scout/session.js` | Session manifest schema |
+| `scripts/benchmark-discovery.ps1` | Discovery mode benchmark |
+| `scripts/monitor.ps1` | Scheduled monitor example |
+| `AGENTS.md` | Harness routing |
 
-- No unapproved `git clone`, package install, repo script execution, or GitHub writes
-- Reward metadata is inferred from GitHub only; Scout does not verify payout
-- Registry install/test probes require R2D approval phrases and pre-command egress logging
-- Docker `registry_allowlist` probes use bridge networking; Scout does not enforce packet-level egress filtering
-
-## Key CLI Additions (R3)
-
-- `scout profile create <name> --intent beginner|rewarded`
-- `scout cockpit --report <json>`
-- `scout plan install-dry-run --report <json> --candidate-id <id> --contract <json>`
-- `scout plan network-design --report <json> --candidate-id <id>`
-- `scout handoff --report <json> --json-out handoff_package.json`
-
-## Verification (local CI only)
-
-This project does **not** use GitHub Actions for CI (no cloud runner budget). Verify changes locally before push/PR:
+## Verification
 
 ```powershell
 npm run ci
-# or full install + syntax check:
-pwsh ./scripts/ci.ps1
 ```
 
-Agents must run local CI and report results; do not wait on or require GitHub Actions checks.
+Includes `test:policy`. No GitHub Actions CI.
 
-## Repository Layout
+## Open Gaps
 
-- `src/scout/cli.js` — CLI entry
-- `scripts/ci.ps1` — local CI script (mirrors former Actions workflow)
-- `src/scout/profiles.js` — profiles and presets
-- `src/scout/discovery.js` — GitHub discovery + reward signals
-- `src/scout/triage.js` — intent-aware triage
-- `src/scout/runbooks/` — agent-agnostic runbooks
+- Remove `codex_summary.md` in 0.4.0
+- OpenClaw/Slack notifications (deferred)

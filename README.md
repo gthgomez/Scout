@@ -2,19 +2,13 @@
 
 Scout is a policy-enforced, agent-agnostic local tool for finding open-source contribution candidates. Any AI agent harness (Cursor, Claude Code, Gemini, Antigravity, Codex, and others) can orchestrate Scout via runbooks and CLI artifacts.
 
-Release 3 adds dual discovery intents:
+**Current release: 0.3.2** — performance (cache, GraphQL enrichment), workflow pipeline, and incremental monitor.
 
-- **Beginner** — learning-focused issues with setup clarity and small scope.
-- **Rewarded** — bounty/reward metadata hunts using GitHub labels, titles, bodies, and curated seed lists.
+## Prerequisites
 
-Release 1–2 scope remains the evidence pipeline core:
-
-- GitHub metadata discovery and enrichment
-- Saved search profiles with seed lists and threshold overrides
-- Intent-aware triage and portfolio scoring
-- Evidence-backed Markdown/JSON reports
-- Static inspection and approval-bound Docker probes
-- Policy denials before unsafe operations
+- **Node.js 20+**
+- **GitHub token**: copy `.env.example` to `.env` and set `GITHUB_TOKEN` (or `GH_TOKEN`)
+- **Docker** (optional): for `scout probe` only — `docker build -t scout-sandbox:latest .`
 
 ## Agent Runbooks
 
@@ -25,52 +19,60 @@ Release 1–2 scope remains the evidence pipeline core:
 - [Decision Cockpit](src/scout/runbooks/decision-cockpit-runbook.md)
 - [Monitoring](src/scout/runbooks/monitoring-runbook.md)
 
-Legacy `codex-*-agent.md` stubs redirect to the renamed runbooks.
+Harness routing: [`AGENTS.md`](AGENTS.md) — **start from `handoff_package.json`**.
 
-## Agent Workflow
+## Quick Workflow
 
 ```powershell
-npm test
-node src/scout/cli.js profile create beginner-python-ts --intent beginner
-node src/scout/cli.js workflow run --profile beginner-python-ts --out-dir scout_session
-node src/scout/cli.js profile create rewarded-typescript --intent rewarded --trusted-seed-lists rewarded-programs
-node src/scout/cli.js workflow run --profile rewarded-typescript --out-dir scout_reward_session
-node src/scout/cli.js cockpit --report scout_reward_session/scout_report.json
-node src/scout/cli.js handoff --report scout_reward_session/scout_report.json --json-out handoff_package.json
+npm run ci
+node src/scout/cli.js workflow run --profile beginner-python-ts --out-dir scout_session --through discover,cockpit,handoff
+node src/scout/cli.js workflow resume --session scout_session
 ```
 
-`workflow run` writes `agent_summary.md` (primary), deprecated `codex_summary.md` (identical compat copy), `handoff_package.json`, and the standard report artifacts.
+## Discovery Presets
 
-## Discovery Intents
+| Preset | Intent | Notes |
+| --- | --- | --- |
+| `beginner-python-ts` | beginner | mid-size seed list (`beginner-small`) |
+| `beginner-docs-only` | beginner | docs-friendly repos |
+| `beginner-small-repos` | beginner | `stars:<500` filter |
+| `rewarded-typescript` | rewarded | bounty/reward queries |
+| `rewarded-verified-only` | rewarded | verified reward signals only |
 
-| Preset | Intent | Seed list | Notes |
-| --- | --- | --- | --- |
-| `beginner-python-ts` | `beginner` | `default` | good first issue / help wanted / docs |
-| `rewarded-typescript` | `rewarded` | `rewarded-programs` | bounty/reward label and title queries |
+## Performance (0.3.0+)
 
-Profiles without `discovery_intent` default to `beginner`.
+- Disk cache: `.scout/cache/github/` with ETag support
+- Bounded concurrency: `SCOUT_GITHUB_CONCURRENCY` (default 4)
+- GraphQL batch enrichment: `SCOUT_ENRICH_MODE=auto|rest|graphql`
+- CLI: `--no-cache`, `--enrich-mode auto`
 
-## Release 3 Probe Extensions
+Benchmark: `pwsh ./scripts/benchmark-discovery.ps1`
 
-- `registry_allowlist` network policy with R2D approval phrase validation
-- Executable `install_probe` and `test_probe` command sets (pre-command egress logging)
-- `test_probe` gated on successful `install_probe` evidence
-- `scout plan install-dry-run` and `scout plan network-design` CLI wiring
+## Monitor (0.3.2)
 
-Readonly `--network none --command-set readonly` probes remain the default safe path.
+```powershell
+node src/scout/cli.js monitor --profile beginner-python-ts --skip-known --notify
+pwsh ./scripts/monitor.ps1
+```
 
-**Egress honesty:** `registry_allowlist` probes infer registry hostnames from planned argv and block commands whose inferred host is outside the approved list. Docker sandboxes use bridge networking; Scout does not enforce packet-level egress filtering or monitor runtime traffic.
+Exit code **1** when new or improved candidates appear (for schedulers).
 
-## Policy Boundary
+## Use Scout Efficiently
 
-Scout still denies unapproved clones, installs, repo scripts, GitHub writes, issue claiming, and coding workflows regardless of harness.
+1. Start with small `--max-candidates` (15–20)
+2. Run `--through discover,cockpit,handoff` in one step
+3. Read `handoff_package.json` before any coding agent session
+4. Schedule weekly `monitor --skip-known` instead of full rediscovery
 
-## Local CI (no GitHub Actions)
-
-This repo does not use GitHub Actions for CI. Before push/PR, run:
+## Local CI
 
 ```powershell
 npm run ci
 ```
 
-Or the full script: `pwsh ./scripts/ci.ps1`
+No GitHub Actions — see `.github/workflows/test.yml` (disabled reminder).
+
+## Deferred
+
+- `codex_summary.md` removal in 0.4.0
+- OpenClaw/Slack monitor notifications

@@ -1,0 +1,15 @@
+{
+  "seed_list_id": "beginner-small",
+  "name": "Beginner-friendly mid-size repos",
+  "repos": [
+    "formbricks/formbricks",
+    "dubinc/dub",
+    "calcom/cal.com",
+    "payloadcms/payload",
+    "hoppscotch/hoppscotch",
+    "directus/directus",
+    "n8n-io/n8n",
+    "appwrite/appwrite",
+    "medusajs/medusa"
+  ]
+}

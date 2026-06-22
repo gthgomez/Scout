@@ -1,0 +1,30 @@
+name: CI (Self-Hosted)
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  scout-ci:
+    name: Scout CI
+    runs-on: [self-hosted, windows]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify Node.js
+        shell: pwsh
+        run: |
+          node --version
+          if (-not (node --version).StartsWith("v20") -and -not (node --version).StartsWith("v22")) {
+            throw "Node 20+ required on self-hosted runner"
+          }
+
+      - name: Run Scout local CI
+        shell: pwsh
+        run: pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/ci.ps1

@@ -1,6 +1,5 @@
 import { validateReportModel } from "./validators.js";
 import { resolveTriageConfig } from "./triage.js";
-import { resolveDiscoveryIntent } from "./profiles.js";
 
 const VERDICT_ORDER = Object.freeze({ GREEN: 0, YELLOW: 1, GRAY: 2, RED: 3 });
 
@@ -227,11 +226,18 @@ export function exportShortlist(report, options = {}) {
   validateReportModel(report);
 
   const limit = Number.parseInt(options.limit ?? "50", 10);
-  const shortlist = shortlistDecisions(report.decisions)
-    .filter((decision) => decision.verdict !== "RED")
-    .slice(0, Number.isFinite(limit) && limit > 0 ? limit : 50);
-
+  const profile = report.profile ?? {};
+  const allowedVerdicts = new Set(profile.shortlist_verdicts ?? ["GREEN", "YELLOW", "GRAY"]);
   const byId = candidateById(report.candidates);
+
+  const shortlist = shortlistDecisions(report.decisions)
+    .filter((decision) => decision.verdict !== "RED" && allowedVerdicts.has(decision.verdict))
+    .filter((decision) => {
+      if (!profile.require_verified_reward) return true;
+      const candidate = byId.get(decision.candidate_id);
+      return Boolean(candidate?.has_verified_reward_signal);
+    })
+    .slice(0, Number.isFinite(limit) && limit > 0 ? limit : 50);
 
   const discoveryIntent = report.discovery_intent ?? report.decisions[0]?.discovery_intent ?? "beginner";
   const lines = ["# Scout Shortlist", "", `Generated: ${new Date().toISOString()}`, "", `Discovery intent: ${discoveryIntent}`, "", `Candidates: ${shortlist.length}`, ""];

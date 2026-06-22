@@ -24,7 +24,7 @@ Review Scout triage output with confidence categories, why-not-GREEN reasoning, 
 ## Workflow
 1. Validate the report schema and decision coverage.
 2. Export the decision cockpit for human or agent review.
-3. Export `handoff_package.json` for external coding agents (includes `discovery_intent` and reward disclaimers when applicable).
+3. Export `handoff_package.json` (schema 1.1) — start here for external coding agents. Read `recommended_packages` and `suggested_commands` first.
 4. For install/test planning, generate R2D network design text and install dry-run plans without executing them unless an approved registry probe is explicitly requested later.
 
 ## Output expectations

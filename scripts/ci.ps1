@@ -18,6 +18,10 @@ Write-Host "==> npm run test:adversarial"
 npm run test:adversarial
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+Write-Host "==> npm run test:policy"
+npm run test:policy
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
 Write-Host "==> npm run lint"
 npm run lint
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

@@ -1,4 +1,14 @@
 import { assertAllowed } from "./policy.js";
+import {
+  applyIssueMetadata,
+  applyRepositoryMetadata,
+  extractRewardSignals,
+  linkedPrsFromTimeline,
+} from "./candidate-metadata.js";
+import { createGitHubClient } from "./github-client.js";
+import { gitHubRateLimitFromHeaders } from "./github-rate-limit.js";
+
+export { applyIssueMetadata, applyRepositoryMetadata, extractRewardSignals } from "./candidate-metadata.js";
 
 export const DEFAULT_QUERIES = Object.freeze([
   'is:issue state:open label:"good first issue" no:assignee language:TypeScript',
@@ -9,105 +19,6 @@ export const DEFAULT_QUERIES = Object.freeze([
   'is:issue state:open label:"bug" label:"good first issue" no:assignee',
 ]);
 
-export function extractRewardSignals(candidate, issueBody = "") {
-  const title = String(candidate.issue_title ?? "");
-  const body = String(issueBody ?? "");
-  const labels = (candidate.labels ?? []).map((label) => String(label).toLowerCase());
-  const combined = `${title}\n${body}`.toLowerCase();
-  const signals = [];
-  const labelPatterns = [
-    { kind: "label", pattern: "bounty", confidence: "OBSERVED" },
-    { kind: "label", pattern: "reward", confidence: "OBSERVED" },
-    { kind: "label", pattern: "paid", confidence: "OBSERVED" },
-    { kind: "label", pattern: "sponsor", confidence: "OBSERVED" },
-    { kind: "label", pattern: "algora", confidence: "OBSERVED" },
-    { kind: "label", pattern: "gitcoin", confidence: "INFERRED" },
-    { kind: "label", pattern: "issuehunt", confidence: "INFERRED" },
-    { kind: "label", pattern: "💰", confidence: "OBSERVED" },
-  ];
-
-  for (const label of labels) {
-    for (const { kind, pattern, confidence } of labelPatterns) {
-      if (label.includes(pattern)) {
-        signals.push({
-          kind,
-          value: label,
-          confidence,
-          source_ref: `label:${label}`,
-        });
-      }
-    }
-  }
-
-  const bodyKeywords = ["bounty", "reward", "paid", "sponsor", "algora", "gitcoin", "issuehunt"];
-  for (const keyword of bodyKeywords) {
-    if (combined.includes(keyword)) {
-      signals.push({
-        kind: "keyword",
-        value: keyword,
-        confidence: title.toLowerCase().includes(keyword) ? "OBSERVED" : "INFERRED",
-        source_ref: title.toLowerCase().includes(keyword) ? "issue_title" : "issue_body",
-      });
-    }
-  }
-
-  const amountPatterns = [
-    /\$\s*(\d{1,6}(?:,\d{3})*(?:\.\d{2})?)/gi,
-    /(\d{1,6}(?:,\d{3})*(?:\.\d{2})?)\s*(?:usd|usdc|usdt)\b/gi,
-  ];
-  let estimatedRewardUsd = null;
-  for (const pattern of amountPatterns) {
-    let match = pattern.exec(title);
-    let sourceRef = "issue_title";
-    if (!match) {
-      pattern.lastIndex = 0;
-      match = pattern.exec(body);
-      sourceRef = "issue_body";
-    }
-    if (match) {
-      const parsed = Number(String(match[1]).replaceAll(",", ""));
-      if (Number.isFinite(parsed) && parsed > 0) {
-        estimatedRewardUsd = parsed;
-        signals.push({
-          kind: "amount",
-          value: `$${parsed}`,
-          confidence: sourceRef === "issue_title" ? "OBSERVED" : "INFERRED",
-          source_ref: sourceRef,
-        });
-        break;
-      }
-    }
-    pattern.lastIndex = 0;
-  }
-
-  const deduped = dedupeRewardSignals(signals);
-  const hasVerified = deduped.some((signal) => signal.confidence === "OBSERVED" && ["label", "amount"].includes(signal.kind));
-  const hasInferred = deduped.some((signal) => signal.confidence === "INFERRED" || signal.kind === "keyword");
-
-  return {
-    reward_signals: deduped,
-    has_verified_reward_signal: hasVerified,
-    has_inferred_reward_signal: hasInferred,
-    estimated_reward_usd: estimatedRewardUsd,
-    source_observations: deduped.map((signal) => ({
-      kind: "reward_signal",
-      value: `${signal.kind}:${signal.value}`,
-      confidence: signal.confidence,
-      source_ref: signal.source_ref,
-    })),
-  };
-}
-
-function dedupeRewardSignals(signals) {
-  const seen = new Set();
-  return signals.filter((signal) => {
-    const key = `${signal.kind}:${signal.value}:${signal.source_ref}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-}
-
 export function dedupeCandidates(candidates) {
   const seen = new Map();
   for (const candidate of candidates) {
@@ -117,61 +28,6 @@ export function dedupeCandidates(candidates) {
     }
   }
   return [...seen.values()];
-}
-
-export function applyRepositoryMetadata(candidate, repository) {
-  return {
-    ...candidate,
-    archived: repository.archived ?? candidate.archived,
-    default_branch: repository.default_branch ?? repository.defaultBranchRef?.name ?? candidate.default_branch,
-    primary_language: repository.language ?? repository.primaryLanguage?.name ?? candidate.primary_language,
-    license_spdx: repository.license?.spdx_id ?? repository.licenseInfo?.spdxId ?? candidate.license_spdx,
-    latest_repo_activity_at:
-      repository.pushed_at ?? repository.updated_at ?? repository.pushedAt ?? repository.updatedAt ?? candidate.latest_repo_activity_at,
-    collection_status: candidate.collection_status === "FAILED" ? "PARTIAL" : "OBSERVED",
-  };
-}
-
-export function applyIssueMetadata(candidate, issue) {
-  const linkedPrs = issue.linked_prs ?? issue.timelineItems?.nodes?.filter((node) => node.pullRequest).map((node) => node.pullRequest) ?? [];
-  const maintainerComment = latestMaintainerComment(issue.comments?.nodes ?? issue.comments ?? []);
-  return {
-    ...candidate,
-    latest_maintainer_activity_at: maintainerComment?.updatedAt ?? maintainerComment?.updated_at ?? candidate.latest_maintainer_activity_at,
-    linked_prs: linkedPrs.map(normalizeLinkedPr),
-    claimed_in_comments: issueAppearsClaimed(issue.comments?.nodes ?? issue.comments ?? []),
-    collection_status: candidate.collection_status === "FAILED" ? "PARTIAL" : "OBSERVED",
-  };
-}
-
-function latestMaintainerComment(comments) {
-  return comments
-    .filter((comment) => ["OWNER", "MEMBER", "COLLABORATOR"].includes(authorAssociationOf(comment)))
-    .sort((a, b) => new Date(b.updatedAt ?? b.updated_at ?? 0) - new Date(a.updatedAt ?? a.updated_at ?? 0))[0];
-}
-
-function authorAssociationOf(comment) {
-  return comment.authorAssociation ?? comment.author_association;
-}
-
-function normalizeLinkedPr(pr) {
-  const title = pr.title ?? "";
-  const state = pr.state ?? "unknown";
-  const merged = Boolean(pr.merged ?? pr.mergedAt);
-  return {
-    url: pr.url ?? pr.html_url ?? "",
-    title,
-    state,
-    merged,
-    likely_solves_issue: merged || /\b(fix|fixes|fixed|close|closes|closed|resolve|resolves|resolved)\b/i.test(title),
-  };
-}
-
-function issueAppearsClaimed(comments) {
-  return comments.some((comment) => {
-    const body = String(comment.body ?? "");
-    return /\b(i'?ll take|i am working|i'm working|assigned to me|can i work|working on this)\b/i.test(body);
-  });
 }
 
 export function fromGitHubSearchItem(item, discoveredByQuery, queryDescriptor = null) {
@@ -213,44 +69,100 @@ export async function discoverCandidates({
   collectionErrors = [],
   profile = null,
   enrich = true,
+  cacheEnabled = fetchImpl === globalThis.fetch,
+  enrichMode = null,
+  githubClient = null,
+  skipKnownKeys = null,
+  since = null,
+  knownCandidates = null,
 }) {
   recordAllowed(policy, "github_search_read", auditLog);
-  if (typeof fetchImpl !== "function") {
-    throw new Error("A fetch implementation is required for discovery");
-  }
+  const client =
+    githubClient ??
+    createGitHubClient({
+      fetchImpl,
+      cacheEnabled,
+      enrichMode,
+      auditLog,
+      policy,
+    });
 
   const candidates = [];
   for (const queryEntry of queries) {
     if (candidates.length >= limit) break;
     const queryDescriptor = normalizeQueryDescriptor(queryEntry);
     const query = queryDescriptor.query;
-    const url = new URL("https://api.github.com/search/issues");
-    url.searchParams.set("q", query);
-    url.searchParams.set("per_page", String(Math.min(50, limit)));
-    const response = await fetchImpl(url, { headers: gitHubHeaders() });
-    const rateLimit = gitHubRateLimitFromHeaders(response.headers);
-    recordRateLimitObservation(auditLog, policy, "github_search_read", rateLimit, query);
-    if (!response.ok) {
-      const message = `GitHub search failed with status ${response.status ?? "unknown"}.`;
-      recordCollectionError(collectionErrors, "github_search_read", message, query, rateLimit);
+    try {
+      const searchResponse = await client.searchIssues(query, Math.min(50, limit));
+      recordRateLimitObservation(auditLog, policy, "github_search_read", searchResponse.rate_limit, query);
+      const body = searchResponse.body;
+      for (const item of body.items ?? []) {
+        candidates.push(fromGitHubSearchItem(item, query, queryDescriptor));
+        if (candidates.length >= limit) break;
+      }
+    } catch (error) {
+      const message = `GitHub search failed with status ${error.status ?? "unknown"}.`;
+      recordCollectionError(collectionErrors, "github_search_read", message, query, error.rate_limit ?? null);
       recordFailure(policy, "github_search_read", auditLog, message);
-      continue;
-    }
-    const body = await response.json();
-    for (const item of body.items ?? []) {
-      candidates.push(fromGitHubSearchItem(item, query, queryDescriptor));
-      if (candidates.length >= limit) break;
     }
   }
-  const deduped = applyProfileFilters(dedupeCandidates(candidates), profile).slice(0, limit);
+
+  let deduped = applyProfileFilters(dedupeCandidates(candidates), profile).slice(0, limit);
+  deduped = applyIncrementalFilters(deduped, { skipKnownKeys, since });
+
   if (!enrich) {
     return deduped;
   }
-  const enriched = [];
-  for (const candidate of deduped) {
-    enriched.push(await enrichCandidateMetadata({ policy, candidate, fetchImpl, auditLog }));
+
+  const { fresh, reused } = splitKnownCandidates(deduped, knownCandidates);
+
+  const enrichOne = (candidate) =>
+    enrichCandidateMetadata({
+      policy,
+      candidate,
+      auditLog,
+      client,
+    });
+
+  const enrichedFresh = await client.enrichCandidates(fresh, enrichOne);
+  return [...enrichedFresh, ...reused];
+}
+
+function splitKnownCandidates(candidates, knownCandidates) {
+  if (!knownCandidates || knownCandidates.size === 0) {
+    return { fresh: candidates, reused: [] };
   }
-  return enriched;
+  const fresh = [];
+  const reused = [];
+  for (const candidate of candidates) {
+    const key = candidateKey(candidate);
+    const known = knownCandidates.get(key);
+    if (known && known.updated_at === candidate.updated_at) {
+      reused.push(known);
+    } else {
+      fresh.push(candidate);
+    }
+  }
+  return { fresh, reused };
+}
+
+function applyIncrementalFilters(candidates, { skipKnownKeys, since }) {
+  let filtered = candidates;
+  if (since) {
+    const sinceMs = new Date(since).getTime();
+    filtered = filtered.filter((candidate) => {
+      const updated = new Date(candidate.updated_at ?? 0).getTime();
+      return !Number.isNaN(sinceMs) && updated > sinceMs;
+    });
+  }
+  if (skipKnownKeys && skipKnownKeys.size > 0) {
+    filtered = filtered.filter((candidate) => !skipKnownKeys.has(candidateKey(candidate)));
+  }
+  return filtered;
+}
+
+export function candidateKey(candidate) {
+  return `${candidate.repo_owner}/${candidate.repo_name}#${candidate.issue_number}`;
 }
 
 function normalizeQueryDescriptor(queryEntry) {
@@ -276,16 +188,16 @@ function sourceObservationsFromQuery(queryDescriptor) {
   ];
 }
 
-export async function enrichCandidateMetadata({ policy, candidate, fetchImpl = globalThis.fetch, auditLog = null }) {
+export async function enrichCandidateMetadata({ policy, candidate, fetchImpl = globalThis.fetch, auditLog = null, client = null }) {
+  const github = client ?? createGitHubClient({ fetchImpl, auditLog, policy });
   let enriched = candidate;
   const metadataErrors = [];
   const rateLimitObservations = [];
 
   try {
     recordAllowed(policy, "github_repo_metadata_read", auditLog, candidate.candidate_id);
-    const repositoryResponse = await fetchGitHubJsonWithMetadata(
+    const repositoryResponse = await github.fetchJson(
       `https://api.github.com/repos/${candidate.repo_owner}/${candidate.repo_name}`,
-      fetchImpl,
     );
     recordRateLimitObservation(auditLog, policy, "github_repo_metadata_read", repositoryResponse.rate_limit, candidate.candidate_id);
     pushRateLimitObservation(rateLimitObservations, "github_repo_metadata_read", repositoryResponse.rate_limit);
@@ -298,15 +210,14 @@ export async function enrichCandidateMetadata({ policy, candidate, fetchImpl = g
 
   try {
     recordAllowed(policy, "github_issue_metadata_read", auditLog, candidate.candidate_id);
-    const issueResponse = await fetchGitHubJsonWithMetadata(
+    const issueResponse = await github.fetchJson(
       `https://api.github.com/repos/${candidate.repo_owner}/${candidate.repo_name}/issues/${candidate.issue_number}`,
-      fetchImpl,
     );
     const issue = issueResponse.body;
     recordRateLimitObservation(auditLog, policy, "github_issue_metadata_read", issueResponse.rate_limit, candidate.candidate_id);
     pushRateLimitObservation(rateLimitObservations, "github_issue_metadata_read", issueResponse.rate_limit);
-    const comments = await fetchIssueComments({ issue, candidate, fetchImpl });
-    const timelineItems = await fetchIssueTimeline({ candidate, fetchImpl });
+    const comments = await fetchIssueComments({ issue, candidate, github });
+    const timelineItems = await fetchIssueTimeline({ candidate, github });
     enriched = applyIssueMetadata(enriched, { ...issue, comments, linked_prs: linkedPrsFromTimeline(timelineItems) });
     const rewardFields = extractRewardSignals(enriched, issue.body ?? "");
     enriched = {
@@ -352,66 +263,27 @@ function applyProfileFilters(candidates, profile) {
   });
 }
 
-async function fetchGitHubJsonWithMetadata(url, fetchImpl, headers = {}) {
-  const response = await fetchImpl(url, {
-    headers: gitHubHeaders(headers),
-  });
-  if (!response.ok) {
-    throw new Error(`GitHub API request failed for ${url} with status ${response.status ?? "unknown"}`);
-  }
-  return {
-    body: await response.json(),
-    rate_limit: gitHubRateLimitFromHeaders(response.headers),
-  };
-}
-
-function gitHubHeaders(headers = {}) {
-  const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN || "";
-  return {
-    Accept: "application/vnd.github+json",
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    ...headers,
-  };
-}
-
-async function fetchGitHubJson(url, fetchImpl, headers = {}) {
-  const response = await fetchGitHubJsonWithMetadata(url, fetchImpl, headers);
-  return response.body;
-}
-
-async function fetchIssueComments({ issue, candidate, fetchImpl }) {
+async function fetchIssueComments({ issue, candidate, github }) {
   const commentsUrl =
     issue.comments_url ?? `https://api.github.com/repos/${candidate.repo_owner}/${candidate.repo_name}/issues/${candidate.issue_number}/comments`;
   try {
-    return await fetchGitHubJson(commentsUrl, fetchImpl);
+    const response = await github.fetchJson(commentsUrl);
+    return response.body;
   } catch {
     return [];
   }
 }
 
-async function fetchIssueTimeline({ candidate, fetchImpl }) {
+async function fetchIssueTimeline({ candidate, github }) {
   try {
-    return await fetchGitHubJson(
+    const response = await github.fetchJson(
       `https://api.github.com/repos/${candidate.repo_owner}/${candidate.repo_name}/issues/${candidate.issue_number}/timeline`,
-      fetchImpl,
-      { Accept: "application/vnd.github.mockingbird-preview+json" },
+      { headers: { Accept: "application/vnd.github.mockingbird-preview+json" } },
     );
+    return response.body;
   } catch {
     return [];
   }
-}
-
-function linkedPrsFromTimeline(timelineItems) {
-  if (!Array.isArray(timelineItems)) return [];
-  return timelineItems
-    .map((item) => item.source?.issue ?? item)
-    .filter((item) => item?.pull_request)
-    .map((item) => ({
-      title: item.title,
-      state: item.state,
-      url: item.html_url ?? item.pull_request?.html_url,
-      merged: Boolean(item.pull_request?.merged_at),
-    }));
 }
 
 function recordAllowed(policy, operation, auditLog, candidateId = null) {
@@ -448,37 +320,6 @@ function recordCollectionError(collectionErrors, operation, message, query = nul
   });
 }
 
-function gitHubRateLimitFromHeaders(headers) {
-  const limit = readHeaderNumber(headers, "x-ratelimit-limit");
-  const remaining = readHeaderNumber(headers, "x-ratelimit-remaining");
-  const reset = readHeaderNumber(headers, "x-ratelimit-reset");
-  const resource = readHeaderString(headers, "x-ratelimit-resource");
-  const used = readHeaderNumber(headers, "x-ratelimit-used");
-  if (limit === null && remaining === null && reset === null && resource === null && used === null) {
-    return null;
-  }
-  return {
-    limit,
-    remaining,
-    reset_at: reset === null ? null : new Date(reset * 1000).toISOString(),
-    resource,
-    used,
-  };
-}
-
-function readHeaderNumber(headers, name) {
-  const value = readHeaderString(headers, name);
-  if (value === null) return null;
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
-function readHeaderString(headers, name) {
-  const value = headers?.get?.(name);
-  if (value === undefined || value === null || value === "") return null;
-  return String(value);
-}
-
 function pushRateLimitObservation(observations, operation, rateLimit) {
   if (!rateLimit) return;
   observations.push({
@@ -499,3 +340,6 @@ function recordRateLimitObservation(auditLog, policy, operation, rateLimit, cand
     candidate_id: candidateId,
   });
 }
+
+// Re-export for tests that mock raw fetch error paths on search
+export { gitHubRateLimitFromHeaders };

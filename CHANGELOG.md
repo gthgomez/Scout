@@ -1,5 +1,40 @@
 # Changelog
 
+## [0.3.2] — Profiles + incremental monitor
+
+### Added
+- Presets: `beginner-docs-only`, `beginner-small-repos`, `rewarded-verified-only`
+- Seed lists: `beginner-small`, `docs-friendly`; `beginner-python-ts` now uses `beginner-small`
+- Profile fields: `require_verified_reward`, `shortlist_verdicts`, `repo_size_filter`
+- `scout monitor --skip-known`, `--since`, `--notify` with exit code 1 on actionable events
+- `scripts/monitor.ps1` for Task Scheduler
+- Incremental enrichment reuse via `knownCandidates` map
+
+## [0.3.1] — Workflow UX
+
+### Added
+- `workflow.js` / `session.js` — pipeline orchestration and session manifest
+- `scout workflow run --through discover,static,cockpit,handoff`
+- `scout workflow resume --session <dir>`
+- `scout workflow run --shortlist-limit N`
+- `scout inspect --candidate-id <id>`
+- Subcommand help: `scout workflow|plan|probe --help`
+- Handoff schema 1.1: `recommended_packages`, `suggested_commands`, `schema_version`
+- [`AGENTS.md`](AGENTS.md) — handoff-first harness routing
+- `test:policy` in `npm run ci`
+
+## [0.3.0] — Performance
+
+### Added
+- `github-client.js` — unified GitHub HTTP/GraphQL transport with cache, concurrency, and backoff
+- `github-cache.js` — disk cache under `.scout/cache/github/` with ETag support
+- `github-graphql.js` — batch GraphQL enrichment with per-candidate REST fallback
+- `async-pool.js` — bounded concurrency for candidate enrichment
+- `candidate-metadata.js` — shared metadata/reward helpers (breaks import cycles)
+- CLI flags: `--no-cache`, `--enrich-mode rest|graphql|auto`
+- `scripts/benchmark-discovery.ps1` — local discovery mode comparison
+- Env vars: `SCOUT_CACHE_TTL_SEARCH`, `SCOUT_CACHE_TTL_METADATA`, `SCOUT_GITHUB_CONCURRENCY`, `SCOUT_ENRICH_MODE`
+
 ## [0.2.0] — Release 3 (R3)
 
 ### Fixes (post-audit)
@@ -7,7 +42,8 @@
 - Propagate `discovery_intent` through monitor, inspect, and triage config merge paths
 - Rewarded GREEN requires verified reward signal (label or title payout); inferred-only stays YELLOW
 - Curated `rewarded-programs` seed list (removed platform meta-repo entries)
-- `package.json` version aligned with release notes
+- `package.json` and `package-lock.json` version aligned to `0.2.0`
+- Docs sync: README prerequisites (`.env`, Docker), expanded `PROJECT_CONTEXT.md` layout/CLI map, Dockerfile version label
 
 ### R3.0 — Dual discovery intents + agent-agnostic harness
 - Added `discovery_intent` (`beginner` | `rewarded`) on search profiles with backward-compatible default `beginner`
