@@ -6,10 +6,6 @@
     { "repo": "PostHog/posthog" },
     { "repo": "supabase/supabase" },
     { "repo": "makeplane/plane" },
-    {
-      "repo": "formancehq/formance",
-      "search_query": "repo:formancehq/formance is:issue state:open label:bounty no:assignee"
-    },
     { "repo": "zio/zio" },
     { "repo": "golemcloud/golem" }
   ]

@@ -1,5 +1,58 @@
 # Changelog
 
+## [0.6.0] — Algora read-only enrich (gated)
+
+### Added
+- `algora-enrich.js` — optional read-only Algora public-page status/amount parse behind `algora_platform_enrich` (default `false`)
+- Candidate fields `platform_status_observed`, `platform_amount_observed` with `INFERRED` source observations
+- Policy operation `bounty_platform_metadata_read` for controlled platform page fetch
+
+### Changed
+- Discovery enrichment pipeline invokes Algora enrich when profile flag is enabled
+
+## [0.5.5] — Operational loop
+
+### Added
+- `rewarded-hunt-dev` preset — 15-candidate cap, two platform-first broad queries, cache-friendly local iteration
+- `workflow-rewarded.test.js` — E2E handoff schema 1.2 with Algora `claim_steps`
+- Monitoring runbook: daily `rewarded-cash-in` monitor, weekly nocache benchmark cadence
+
+### Changed
+- CLI help banner → Scout 0.6.0
+
+## [0.5.4] — Ranking and report value
+
+### Added
+- `rewarded-cash-in` preset — GREEN-only shortlist requiring trusted seed or platform URL; ROI-ranked
+- `computeRoiScoreInferred`, `resolveRankingKey`, `formatDiscoverySource` in `roi-ranking.js`
+- Report **Source** and **Friction** columns on rewarded shortlist tables
+- ROI display for non-USD via `~N.NN (CURRENCY)` inferred label
+
+### Changed
+- ROI shortlist sort uses `roi_score_inferred` fallback and `claim_friction_score` tiebreak
+
+## [0.5.3] — Discovery rebalance
+
+### Added
+- Profile fields `max_issues_per_broad_query`, `min_seed_candidate_slots`, `exclude_repos`
+- Per-broad-query candidate caps and seed slot reservation in `discovery-query.js`
+
+### Changed
+- `rewarded-hunt` platform-first `include_queries`; generic `label:bounty` last
+- `rewarded-hunt` excludes `Scottcjn/rustchain-bounties`
+- Removed `formancehq/formance` from `rewarded-programs-algora` (persistent 422)
+
+## [0.5.2] — Shortlist precision
+
+### Added
+- Profile flag `green_requires_platform_or_trusted` on `rewarded-hunt`
+- Expanded `bounty-spam.js` heuristics: `[BOUNTY]` titles, rustchain/RTC farm patterns, hard-drop on high-confidence farms
+- Benchmark precision targets: `max_spam_farm_green`, `min_green_from_trusted_or_platform_pct`
+
+### Changed
+- Broad GREEN gate: title verified reward requires `kind === "amount"` (not keyword)
+- GREEN on broad requires platform URL, trusted seed, or USD ≥ `broad_green_min_usd` when flag enabled
+
 ## [0.5.1] — Handoff package schema 1.2
 
 ### Added

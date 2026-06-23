@@ -68,12 +68,27 @@ export function shouldInterleaveDiscoveryQueries(profile) {
  * Partition the discovery limit between seed and broad query groups.
  */
 export function resolveDiscoveryBudgets(profile, limit) {
-  const reserve = profile?.reserve_broad_query_slots;
-  if (typeof reserve === "number" && reserve > 0) {
-    const seedLimit = Math.max(0, limit - reserve);
-    return { seedLimit, broadLimit: reserve, partitioned: true };
+  const reserveBroad = profile?.reserve_broad_query_slots ?? 0;
+  const minSeedSlots = profile?.min_seed_candidate_slots ?? 0;
+  if (reserveBroad > 0 || minSeedSlots > 0) {
+    const broadLimit = Math.min(reserveBroad > 0 ? reserveBroad : limit, Math.max(0, limit - minSeedSlots));
+    const seedLimit = Math.min(limit, Math.max(minSeedSlots, limit - broadLimit));
+    return { seedLimit, broadLimit: Math.max(0, limit - seedLimit), partitioned: true };
   }
   return { seedLimit: limit, broadLimit: limit, partitioned: false };
+}
+
+export function resolveMaxIssuesPerBroadQuery(profile) {
+  const value = profile?.max_issues_per_broad_query;
+  return typeof value === "number" && value > 0 ? value : null;
+}
+
+export function resolveMaxPerQueryForEntry(profile, queryEntry) {
+  const descriptor = normalizeQueryDescriptor(queryEntry);
+  if (descriptor.kind === "trusted_seed_list") {
+    return resolveMaxIssuesPerQuery(profile);
+  }
+  return resolveMaxIssuesPerBroadQuery(profile) ?? resolveMaxIssuesPerQuery(profile);
 }
 
 export function resolveMinBroadQuerySearches(profile, broadQueryCount) {
@@ -109,13 +124,17 @@ function capItems(items, maxPerQuery) {
   return items.slice(0, maxPerQuery);
 }
 
+function pageMaxPerQuery(page, fallback) {
+  return page.maxPerQuery ?? fallback;
+}
+
 function selectSequential(queryPages, limit, maxPerQuery) {
   const selected = [];
   for (const page of queryPages) {
     if (selected.length >= limit) {
       break;
     }
-    const items = capItems(page.items, maxPerQuery);
+    const items = capItems(page.items, pageMaxPerQuery(page, maxPerQuery));
     for (const item of items) {
       if (selected.length >= limit) {
         break;
@@ -129,7 +148,7 @@ function selectSequential(queryPages, limit, maxPerQuery) {
 function selectInterleaved(queryPages, limit, maxPerQuery) {
   const cappedPages = queryPages.map((page) => ({
     ...page,
-    items: capItems(page.items, maxPerQuery),
+    items: capItems(page.items, pageMaxPerQuery(page, maxPerQuery)),
   }));
   const selected = [];
   let round = 0;

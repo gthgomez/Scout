@@ -8,9 +8,13 @@ const SPAM_REPO_NAME_PATTERNS = Object.freeze([
   /nailstorm/i,
   /frailbox-checkpoint/i,
   /manifest-wizard/i,
+  /rustchain/i,
 ]);
 
 const SPAM_TITLE_PATTERN = /^\[\$\d+(?:\.\d{2})?\s+bounty\]/i;
+const BRACKET_BOUNTY_TITLE_PATTERN = /^\[BOUNTY/i;
+const STAR_FOLLOW_BOUNTY_PATTERN = /\bstar\s*&\s*follow\b/i;
+const RTC_FARM_TITLE_PATTERN = /\b\d+\s*RTC\b/i;
 
 export function isFromTrustedSeedList(candidate) {
   return (candidate?.source_observations ?? []).some((observation) => observation.kind === "trusted_seed_list");
@@ -26,7 +30,31 @@ export function detectBountySpamSignals(candidate) {
     signals.push({
       kind: "title_template",
       confidence: "high",
-      value: "bracketed bounty title template",
+      value: "bracketed dollar bounty title template",
+    });
+  }
+
+  if (BRACKET_BOUNTY_TITLE_PATTERN.test(title)) {
+    signals.push({
+      kind: "bracket_bounty_title",
+      confidence: "high",
+      value: "bracketed [BOUNTY] title template",
+    });
+  }
+
+  if (STAR_FOLLOW_BOUNTY_PATTERN.test(title)) {
+    signals.push({
+      kind: "engagement_farm_title",
+      confidence: "high",
+      value: "star and follow engagement farm title",
+    });
+  }
+
+  if (RTC_FARM_TITLE_PATTERN.test(title) && /bounty|reward/i.test(title)) {
+    signals.push({
+      kind: "rtc_farm_title",
+      confidence: "high",
+      value: "RTC token bounty farm title",
     });
   }
 
@@ -57,12 +85,22 @@ export function detectBountySpamSignals(candidate) {
 }
 
 export function bountySpamHardDropReason(candidate) {
-  const signals = detectBountySpamSignals(candidate);
   if (isFromTrustedSeedList(candidate)) {
     return null;
   }
+
+  const signals = detectBountySpamSignals(candidate);
   if (signals.some((signal) => signal.kind === "repo_name")) {
     return "Likely bounty spam (suspicious repo name pattern).";
+  }
+  if (
+    signals.some(
+      (signal) =>
+        signal.confidence === "high" &&
+        ["bracket_bounty_title", "engagement_farm_title", "rtc_farm_title"].includes(signal.kind),
+    )
+  ) {
+    return "Likely bounty spam (high-confidence bounty farm title pattern).";
   }
   if (signals.filter((signal) => signal.confidence === "high").length >= 2) {
     return "Likely bounty spam (multiple high-confidence spam signals).";
@@ -83,6 +121,18 @@ export function bountySpamPenalty(candidate) {
     if (signal.kind === "title_template") {
       penalty += 40;
       reasons.push("-40 spam bounty title template");
+    }
+    if (signal.kind === "bracket_bounty_title") {
+      penalty += 45;
+      reasons.push("-45 bracketed [BOUNTY] title template");
+    }
+    if (signal.kind === "engagement_farm_title") {
+      penalty += 50;
+      reasons.push("-50 star-and-follow engagement farm title");
+    }
+    if (signal.kind === "rtc_farm_title") {
+      penalty += 45;
+      reasons.push("-45 RTC token bounty farm title");
     }
     if (signal.kind === "repo_name") {
       penalty += 50;

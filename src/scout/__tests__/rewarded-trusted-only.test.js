@@ -22,6 +22,24 @@ describe("bounty spam detection", () => {
     assert.ok(signals.some((signal) => signal.kind === "title_template"));
   });
 
+  it("hard-drops rustchain bounty farm repos", () => {
+    const drop = bountySpamHardDropReason({
+      repo_owner: "Scottcjn",
+      repo_name: "rustchain-bounties",
+      issue_title: "[BOUNTY] Star & Follow — Earn RTC",
+    });
+    assert.equal(drop, "Likely bounty spam (suspicious repo name pattern).");
+  });
+
+  it("hard-drops bracket [BOUNTY] engagement farm titles", () => {
+    const drop = bountySpamHardDropReason({
+      repo_owner: "spam",
+      repo_name: "demo",
+      issue_title: "[BOUNTY] Star & Follow — Earn RTC (Ongoing)",
+    });
+    assert.equal(drop, "Likely bounty spam (high-confidence bounty farm title pattern).");
+  });
+
   it("flags known bounty farm repo names", () => {
     const signals = detectBountySpamSignals({
       issue_title: "Fix websocket reconnect",

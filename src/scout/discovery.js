@@ -11,6 +11,7 @@ import {
   normalizeQueryDescriptor,
   resolveDiscoveryBudgets,
   resolveMaxIssuesPerQuery,
+  resolveMaxPerQueryForEntry,
   resolveMinBroadQuerySearches,
   searchPerPageForQuery,
   selectDiscoveryItems,
@@ -19,6 +20,7 @@ import {
 import { createGitHubClient } from "./github-client.js";
 import { claimIssueKeys } from "./claims-ledger.js";
 import { applyContributingPrefetch } from "./contributing-prefetch.js";
+import { applyAlgoraPlatformEnrich } from "./algora-enrich.js";
 import { gitHubRateLimitFromHeaders } from "./github-rate-limit.js";
 
 export { applyIssueMetadata, applyRepositoryMetadata, extractRewardSignals } from "./candidate-metadata.js";
@@ -150,6 +152,7 @@ export async function discoverCandidates({
   const { fresh, reused } = splitKnownCandidates(deduped, knownCandidates);
   const contributingCache = new Map();
   const prefetchContributing = profile?.prefetch_contributing === true;
+  const algoraPlatformEnrich = profile?.algora_platform_enrich === true;
 
   const enrichOne = async (candidate) => {
     let enriched = await enrichCandidateMetadata({
@@ -158,31 +161,38 @@ export async function discoverCandidates({
       auditLog,
       client,
     });
-    if (!prefetchContributing) {
-      return enriched;
+    if (prefetchContributing) {
+      const merged = await applyContributingPrefetch({
+        candidate: enriched,
+        rewardFields: {
+          reward_signals: enriched.reward_signals ?? [],
+          has_verified_reward_signal: enriched.has_verified_reward_signal ?? false,
+          has_observed_reward_metadata: enriched.has_observed_reward_metadata ?? false,
+          has_inferred_reward_signal: enriched.has_inferred_reward_signal ?? false,
+          estimated_reward_usd: enriched.estimated_reward_usd ?? null,
+          estimated_reward_amount: enriched.estimated_reward_amount ?? null,
+          reward_currency: enriched.reward_currency ?? null,
+          source_observations: [],
+        },
+        client,
+        cache: contributingCache,
+        policy,
+        auditLog,
+      });
+      enriched = {
+        ...enriched,
+        ...merged,
+        source_observations: [...(enriched.source_observations ?? []), ...(merged.source_observations ?? [])],
+      };
     }
-    const merged = await applyContributingPrefetch({
-      candidate: enriched,
-      rewardFields: {
-        reward_signals: enriched.reward_signals ?? [],
-        has_verified_reward_signal: enriched.has_verified_reward_signal ?? false,
-        has_observed_reward_metadata: enriched.has_observed_reward_metadata ?? false,
-        has_inferred_reward_signal: enriched.has_inferred_reward_signal ?? false,
-        estimated_reward_usd: enriched.estimated_reward_usd ?? null,
-        estimated_reward_amount: enriched.estimated_reward_amount ?? null,
-        reward_currency: enriched.reward_currency ?? null,
-        source_observations: [],
-      },
-      client,
-      cache: contributingCache,
-      policy,
-      auditLog,
-    });
-    return {
-      ...enriched,
-      ...merged,
-      source_observations: [...(enriched.source_observations ?? []), ...(merged.source_observations ?? [])],
-    };
+    if (algoraPlatformEnrich) {
+      enriched = await applyAlgoraPlatformEnrich({
+        candidate: enriched,
+        policy,
+        auditLog,
+      });
+    }
+    return enriched;
   };
 
   const enrichedFresh = await client.enrichCandidates(fresh, enrichOne);
@@ -255,6 +265,8 @@ async function collectPartitionedDiscoveryItems({
   const searchedBroad = new Set();
 
   for (const { entry, group } of searchOrder) {
+    const queryDescriptor = normalizeQueryDescriptor(entry);
+    const maxForQuery = resolveMaxPerQueryForEntry(profile, entry);
     const page = await searchDiscoveryQueryPage({
       queryEntry: entry,
       budget: limit,
@@ -262,15 +274,16 @@ async function collectPartitionedDiscoveryItems({
       policy,
       auditLog,
       collectionErrors,
-      maxPerQuery,
+      maxPerQuery: maxForQuery,
     });
     if (!page) {
       continue;
     }
+    const pageWithCap = { ...page, maxPerQuery: maxForQuery };
     if (group === "seed") {
-      seedPages.push(page);
+      seedPages.push(pageWithCap);
     } else {
-      broadPages.push(page);
+      broadPages.push(pageWithCap);
       searchedBroad.add(page.query);
     }
   }
@@ -281,6 +294,7 @@ async function collectPartitionedDiscoveryItems({
       if (searchedBroad.has(queryDescriptor.query)) {
         continue;
       }
+      const maxForQuery = resolveMaxPerQueryForEntry(profile, queryEntry);
       const page = await searchDiscoveryQueryPage({
         queryEntry,
         budget: limit,
@@ -288,10 +302,10 @@ async function collectPartitionedDiscoveryItems({
         policy,
         auditLog,
         collectionErrors,
-        maxPerQuery,
+        maxPerQuery: maxForQuery,
       });
       if (page) {
-        broadPages.push(page);
+        broadPages.push({ ...page, maxPerQuery: maxForQuery });
         searchedBroad.add(page.query);
       }
       if (searchedBroad.size >= minBroadSearches) {

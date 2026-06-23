@@ -182,13 +182,13 @@ describe("broad-query GREEN quality gate", () => {
     broad_green_min_usd: 25,
   };
 
-  function rustchainLabelOnlyCandidate() {
+  function broadLabelOnlyCandidate(overrides = {}) {
     return {
       ...fixtures.greenCandidate,
-      candidate_id: "SCOUT-rustchain-label-1",
-      repo_owner: "Scottcjn",
-      repo_name: "rustchain-bounties",
-      issue_title: "[BOUNTY: 5 RTC] Improve wallet sync reliability",
+      candidate_id: "SCOUT-broad-label-1",
+      repo_owner: "unknown",
+      repo_name: "oss-widget",
+      issue_title: "Fix checkout regression with bounty payout",
       discovered_by_query: 'label:bounty is:issue state:open no:assignee',
       has_verified_reward_signal: true,
       has_inferred_reward_signal: true,
@@ -200,7 +200,17 @@ describe("broad-query GREEN quality gate", () => {
         ...(fixtures.greenCandidate.source_observations ?? []),
         { kind: "reward_signal", value: "label:bounty", confidence: "OBSERVED" },
       ],
+      ...overrides,
     };
+  }
+
+  function rustchainLabelOnlyCandidate() {
+    return broadLabelOnlyCandidate({
+      candidate_id: "SCOUT-rustchain-label-1",
+      repo_owner: "Scottcjn",
+      repo_name: "rustchain-bounties",
+      issue_title: "[BOUNTY: 5 RTC] Improve wallet sync reliability",
+    });
   }
 
   function appwriteAlgoraCandidate() {
@@ -234,7 +244,7 @@ describe("broad-query GREEN quality gate", () => {
   }
 
   it("caps label-only broad-query candidates at YELLOW (rustchain-style)", () => {
-    const decision = triageCandidate(rustchainLabelOnlyCandidate(), {
+    const decision = triageCandidate(broadLabelOnlyCandidate(), {
       profile: rewardedBroadProfile,
       now: NOW,
     });
@@ -273,7 +283,7 @@ describe("broad-query GREEN quality gate", () => {
   it("allows GREEN when broad candidate meets broad_green_min_usd", () => {
     const decision = triageCandidate(
       {
-        ...rustchainLabelOnlyCandidate(),
+        ...broadLabelOnlyCandidate(),
         estimated_reward_usd: 50,
         reward_signals: [
           { kind: "label", value: "bounty", confidence: "OBSERVED", source_ref: "label:bounty" },
@@ -284,6 +294,35 @@ describe("broad-query GREEN quality gate", () => {
     );
 
     assert.equal(decision.verdict, "GREEN");
+  });
+
+  it("does not treat title keyword alone as verified title payout", () => {
+    const decision = triageCandidate(
+      {
+        ...broadLabelOnlyCandidate(),
+        issue_title: "Fix bounty payout for wallet sync",
+        reward_signals: [
+          { kind: "label", value: "bounty", confidence: "OBSERVED", source_ref: "label:bounty" },
+          { kind: "keyword", value: "bounty", confidence: "OBSERVED", source_ref: "issue_title" },
+        ],
+      },
+      { profile: rewardedBroadProfile, now: NOW },
+    );
+
+    assert.equal(decision.verdict, "YELLOW");
+  });
+
+  it("hard-drops rustchain farm candidates before verdict", () => {
+    const decision = triageCandidate(
+      {
+        ...rustchainLabelOnlyCandidate(),
+        issue_title: "[BOUNTY] Star & Follow — Earn RTC",
+      },
+      { profile: rewardedBroadProfile, now: NOW },
+    );
+
+    assert.equal(decision.verdict, "RED");
+    assert.ok(decision.drop_reason?.includes("bounty spam"));
   });
 });
 

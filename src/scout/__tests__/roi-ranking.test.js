@@ -5,6 +5,7 @@ import {
   computeClaimFrictionScore,
   computeEffortEstimate,
   computeRoiScore,
+  computeRoiScoreInferred,
   computeStackFitScore,
 } from "../roi-ranking.js";
 
@@ -97,6 +98,19 @@ describe("roi ranking heuristics", () => {
       }),
       100 / 14,
     );
+  });
+
+  it("computes inferred roi for non-USD rewards with currency tier", () => {
+    const rtc = computeRoiScoreInferred({
+      estimated_reward_amount: 100,
+      reward_currency: "RTC",
+      issue_body: "Small fix",
+      labels: ["good first issue"],
+    });
+    assert.equal(rtc?.roi_score, null);
+    assert.equal(rtc?.roi_confidence, "RTC");
+    assert.ok(rtc?.roi_score_inferred > 0);
+    assert.ok(rtc.roi_score_inferred < 10);
   });
 
   it("attaches roi fields on candidates", () => {

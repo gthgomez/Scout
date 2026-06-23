@@ -4,6 +4,7 @@ const metadataAllowed = [
   "github_search_read",
   "github_issue_metadata_read",
   "github_repo_metadata_read",
+  "bounty_platform_metadata_read",
   "search_profile_read",
   "search_profile_write",
   "local_monitor_report_write",

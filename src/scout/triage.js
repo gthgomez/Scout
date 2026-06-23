@@ -6,7 +6,7 @@ import {
   bountySpamPenalty,
   isFromTrustedSeedList,
 } from "./bounty-spam.js";
-import { attachRoiFields } from "./roi-ranking.js";
+import { attachRoiFields, resolveRankingKey } from "./roi-ranking.js";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
@@ -313,6 +313,12 @@ export function triageCandidate(candidate, options = {}) {
       gapCodes = ["REWARD_GAP"];
       riskSummary = broadGreenGate.risk_summary;
       humanNextAction = broadGreenGate.human_next_action;
+    } else if (!passesGreenRequiresPlatformOrTrusted(candidate, profile)) {
+      verdict = "YELLOW";
+      gapCodes = ["REWARD_GAP"];
+      riskSummary =
+        "Reward candidate lacks trusted seed provenance and platform URL; not eligible for GREEN under green_requires_platform_or_trusted.";
+      humanNextAction = "Confirm payout on Algora, IssueHunt, or another platform before pursuing.";
     } else {
       verdict = stale || score.score < greenMinScore ? "YELLOW" : "GREEN";
       gapCodes = [];
@@ -369,8 +375,18 @@ function hasTitleVerifiedRewardSignal(candidate) {
     (signal) =>
       signal.confidence === "OBSERVED" &&
       signal.source_ref === "issue_title" &&
-      (signal.kind === "amount" || signal.kind === "keyword"),
+      signal.kind === "amount",
   );
+}
+
+function passesGreenRequiresPlatformOrTrusted(candidate, profile) {
+  if (profile.green_requires_platform_or_trusted !== true) {
+    return true;
+  }
+  if (isFromTrustedSeedList(candidate)) {
+    return true;
+  }
+  return hasPlatformUrlRewardSignal(candidate);
 }
 
 export function evaluateBroadGreenGate(candidate, profile = {}) {
@@ -435,18 +451,18 @@ export function compareTriageDecisions(a, b, { rankShortlistBy = "score", candid
   const verdictCompare = verdictOrder[a.verdict] - verdictOrder[b.verdict];
   if (verdictCompare !== 0) return verdictCompare;
 
-  const sortKey = (decision) => {
-    const candidate = candidateById.get(decision.candidate_id);
-    if (rankShortlistBy === "roi") {
-      return candidate?.roi_score ?? 0;
-    }
-    if (rankShortlistBy === "payout") {
-      return candidate?.estimated_reward_usd ?? 0;
-    }
-    return decision.score ?? 0;
-  };
+  const sortKey = (decision) => resolveRankingKey(candidateById.get(decision.candidate_id), rankShortlistBy);
 
   const keyCompare = sortKey(b) - sortKey(a);
   if (keyCompare !== 0) return keyCompare;
+
+  if (rankShortlistBy === "roi") {
+    const frictionA = candidateById.get(a.candidate_id)?.claim_friction_score ?? 0;
+    const frictionB = candidateById.get(b.candidate_id)?.claim_friction_score ?? 0;
+    if (frictionB !== frictionA) {
+      return frictionB - frictionA;
+    }
+  }
+
   return (b.score ?? 0) - (a.score ?? 0);
 }

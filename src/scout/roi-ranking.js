@@ -128,15 +128,74 @@ export function computeRoiScore(candidate) {
   return reward / Math.max(effort, 1);
 }
 
+const INFERRED_ROI_CURRENCY_TIERS = Object.freeze({
+  USD: 1,
+  USDC: 0.85,
+  USDT: 0.85,
+  RTC: 0.05,
+});
+
+export function computeRoiScoreInferred(candidate) {
+  const effort = computeEffortEstimate(candidate);
+  if (effort === null) {
+    return null;
+  }
+  const usdRoi = computeRoiScore(candidate);
+  if (usdRoi !== null) {
+    return { roi_score: usdRoi, roi_score_inferred: usdRoi, roi_confidence: "USD" };
+  }
+  const amount = candidate.estimated_reward_amount;
+  if (typeof amount !== "number" || !Number.isFinite(amount) || amount <= 0) {
+    return null;
+  }
+  const currency = String(candidate.reward_currency ?? "UNKNOWN").toUpperCase();
+  const tier = INFERRED_ROI_CURRENCY_TIERS[currency] ?? 0.25;
+  const inferred = (amount * tier) / Math.max(effort, 1);
+  return { roi_score: null, roi_score_inferred: inferred, roi_confidence: currency };
+}
+
+export function resolveRankingKey(candidate, rankShortlistBy = "score") {
+  if (rankShortlistBy === "roi") {
+    return candidate?.roi_score ?? candidate?.roi_score_inferred ?? 0;
+  }
+  if (rankShortlistBy === "payout") {
+    return candidate?.estimated_reward_usd ?? 0;
+  }
+  return candidate?.triage_score ?? candidate?.score ?? 0;
+}
+
+export function formatDiscoverySource(candidate) {
+  if (!candidate) {
+    return "unknown";
+  }
+  if (isFromTrustedSeedList(candidate)) {
+    return "trusted_seed";
+  }
+  if (hasPlatformUrl(candidate)) {
+    return "platform";
+  }
+  if (isBroadDiscoveryCandidate(candidate)) {
+    return "broad";
+  }
+  return "unknown";
+}
+
 export function attachRoiFields(candidate, profile = {}, options = {}) {
   const estimated_effort_hours = computeEffortEstimate(candidate);
   const claim_friction_score = computeClaimFrictionScore(candidate, options);
   const stack_fit_score = computeStackFitScore(candidate, profile);
-  const roi_score = computeRoiScore(candidate);
+  const roiFields = computeRoiScoreInferred(candidate) ?? {
+    roi_score: null,
+    roi_score_inferred: null,
+    roi_confidence: null,
+  };
 
   candidate.estimated_effort_hours = estimated_effort_hours;
   candidate.claim_friction_score = claim_friction_score;
   candidate.stack_fit_score = stack_fit_score;
-  candidate.roi_score = roi_score;
+  candidate.roi_score = roiFields.roi_score;
+  candidate.roi_score_inferred = roiFields.roi_score_inferred;
+  candidate.roi_confidence = roiFields.roi_confidence;
+  candidate.discovery_source = formatDiscoverySource(candidate);
   return candidate;
 }

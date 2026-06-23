@@ -81,12 +81,12 @@ describe("trusted seed lists", () => {
     }
   });
 
-  it("loads rewarded-programs-algora packaged seed list with 7 repos", async () => {
+  it("loads rewarded-programs-algora packaged seed list with 6 repos", async () => {
     const seedList = await loadTrustedSeedList("rewarded-programs-algora");
 
     assert.equal(seedList.seed_list_id, "rewarded-programs-algora");
     assert.equal(seedList.name, "Algora-active OSS programs");
-    assert.equal(seedList.repos.length, 7);
+    assert.equal(seedList.repos.length, 6);
     assert.ok(seedList.repos.some((entry) => entry.repo === "twentyhq/twenty"));
     assert.ok(seedList.repos.some((entry) => entry.repo === "PostHog/posthog"));
     assert.ok(seedList.repos.some((entry) => entry.repo === "golemcloud/golem"));
@@ -105,14 +105,13 @@ describe("trusted seed lists", () => {
     assert.deepEqual(overlap, []);
   });
 
-  it("loads rewarded-programs-algora with formance search_query override", async () => {
+  it("loads rewarded-programs-algora without formance (422-prone seed removed)", async () => {
     const seedList = await loadTrustedSeedList("rewarded-programs-algora");
-    const formance = seedList.repos.find((entry) => entry.repo === "formancehq/formance");
 
-    assert.ok(formance);
+    assert.equal(seedList.repos.length, 6);
     assert.equal(
-      formance.search_query,
-      "repo:formancehq/formance is:issue state:open label:bounty no:assignee",
+      seedList.repos.some((entry) => entry.repo === "formancehq/formance"),
+      false,
     );
   });
 

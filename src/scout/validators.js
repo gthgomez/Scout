@@ -173,6 +173,8 @@ export function validateSearchProfile(profile) {
     "interleave_discovery_queries",
     "require_trusted_or_platform_for_broad_green",
     "prefetch_contributing",
+    "green_requires_platform_or_trusted",
+    "algora_platform_enrich",
   ]) {
     if (profile[field] !== undefined && typeof profile[field] !== "boolean") {
       throw new Error(`SearchProfile.${field} must be a boolean`);
@@ -196,6 +198,10 @@ export function validateSearchProfile(profile) {
   assertOptionalFiniteInteger(profile.min_repo_stars, "SearchProfile.min_repo_stars", { min: 0 });
   assertOptionalFiniteInteger(profile.max_repo_stars, "SearchProfile.max_repo_stars", { min: 0 });
   assertOptionalFiniteInteger(profile.max_issues_per_query, "SearchProfile.max_issues_per_query", { min: 1 });
+  assertOptionalFiniteInteger(profile.max_issues_per_broad_query, "SearchProfile.max_issues_per_broad_query", {
+    min: 1,
+  });
+  assertOptionalFiniteInteger(profile.min_seed_candidate_slots, "SearchProfile.min_seed_candidate_slots", { min: 0 });
   assertOptionalFiniteInteger(profile.reserve_broad_query_slots, "SearchProfile.reserve_broad_query_slots", { min: 0 });
   assertOptionalFiniteInteger(profile.broad_green_min_usd, "SearchProfile.broad_green_min_usd", { min: 0 });
   assertOptionalFiniteInteger(profile.search_pace_ms, "SearchProfile.search_pace_ms", { min: 0 });
@@ -226,13 +232,17 @@ export function validateSearchProfile(profile) {
     queries_prioritize_seeds: profile.queries_prioritize_seeds ?? false,
     seed_reward_labels: profile.seed_reward_labels ?? [],
     max_issues_per_query: profile.max_issues_per_query ?? null,
+    max_issues_per_broad_query: profile.max_issues_per_broad_query ?? null,
+    min_seed_candidate_slots: profile.min_seed_candidate_slots ?? null,
     interleave_discovery_queries: profile.interleave_discovery_queries ?? false,
     reserve_broad_query_slots: profile.reserve_broad_query_slots ?? null,
     broad_green_min_usd: profile.broad_green_min_usd ?? null,
     require_trusted_or_platform_for_broad_green: profile.require_trusted_or_platform_for_broad_green ?? false,
+    green_requires_platform_or_trusted: profile.green_requires_platform_or_trusted ?? false,
     shortlist_verdicts: profile.shortlist_verdicts ?? ["GREEN", "YELLOW", "GRAY"],
     repo_size_filter: profile.repo_size_filter ?? null,
     prefetch_contributing: profile.prefetch_contributing ?? false,
+    algora_platform_enrich: profile.algora_platform_enrich ?? false,
     search_pace_ms: profile.search_pace_ms ?? null,
     search_max_retries: profile.search_max_retries ?? null,
     search_secondary_cooldown_ms: profile.search_secondary_cooldown_ms ?? null,

@@ -74,6 +74,7 @@ function summarizeReport(report, queryCount, broadQueryCount) {
     ["GREEN", "YELLOW", "GRAY", "RED"].map((v) => [v, decisions.filter((d) => d.verdict === v).length]),
   );
   const candidates = report.candidates ?? [];
+  const candidateById = new Map(candidates.map((c) => [c.candidate_id, c]));
   const withVerifiedReward = candidates.filter((c) => c.has_verified_reward_signal).length;
   const withPlatformUrl = candidates.filter((c) =>
     (c.reward_signals ?? []).some((s) => s.kind === "platform_url"),
@@ -81,6 +82,23 @@ function summarizeReport(report, queryCount, broadQueryCount) {
   const discoveredQueries = [...new Set(candidates.map((c) => c.discovered_by_query).filter(Boolean))];
   const includeQueries = report.profile?.include_queries ?? [];
   const broadExpected = broadQueryCount ?? includeQueries.length;
+
+  const greenDecisions = decisions.filter((d) => d.verdict === "GREEN");
+  const spamFarmGreen = greenDecisions.filter((d) => {
+    const c = candidateById.get(d.candidate_id);
+    if (!c) return false;
+    const repo = `${c.repo_owner}/${c.repo_name}`.toLowerCase();
+    return /rustchain|bounty-forge|zeroeye/i.test(repo);
+  }).length;
+  const greenFromTrustedOrPlatform = greenDecisions.filter((d) => {
+    const c = candidateById.get(d.candidate_id);
+    if (!c) return false;
+    const trusted = (c.source_observations ?? []).some((o) => o.kind === "trusted_seed_list");
+    const platform = (c.reward_signals ?? []).some((s) => s.kind === "platform_url");
+    return trusted || platform;
+  }).length;
+  const greenFromTrustedOrPlatformPct =
+    greenDecisions.length === 0 ? 0 : Number((greenFromTrustedOrPlatform / greenDecisions.length).toFixed(3));
 
   return {
     run_status: report.run_status,
@@ -106,6 +124,9 @@ function summarizeReport(report, queryCount, broadQueryCount) {
       [...discoveredQueries].map((q) => [q, candidates.filter((c) => c.discovered_by_query === q).length]),
     ),
     failed_queries: collectionErrors.map((e) => ({ query: e.query, message: e.message })),
+    spam_farm_green_count: spamFarmGreen,
+    green_from_trusted_or_platform_count: greenFromTrustedOrPlatform,
+    green_from_trusted_or_platform_pct: greenFromTrustedOrPlatformPct,
   };
 }
 
@@ -166,6 +187,8 @@ const benchmark = {
     max_403_rate: 0,
     min_shortlist_green_yellow: 3,
     broad_queries_executed_pct: 1,
+    max_spam_farm_green: 0,
+    min_green_from_trusted_or_platform_pct: 0.8,
   },
   lanes: lanes.map((lane) => ({
     name: lane.name,

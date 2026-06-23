@@ -1,4 +1,5 @@
 import { validateReportModel, resolveRankShortlistBy } from "./validators.js";
+import { resolveRankingKey } from "./roi-ranking.js";
 import { resolveTriageConfig } from "./triage.js";
 
 const VERDICT_ORDER = Object.freeze({ GREEN: 0, YELLOW: 1, GRAY: 2, RED: 3 });
@@ -256,14 +257,14 @@ export function exportShortlist(report, options = {}) {
 
   if (discoveryIntent === "rewarded") {
     lines.push(
-      "| Rank | Verdict | Repo | Issue | Score | ROI | Effort (h) | Reward Signal | Income Summary | Risk | Next Action |",
-      "| ---: | --- | --- | --- | ---: | ---: | ---: | --- | --- | --- | --- |",
+      "| Rank | Verdict | Source | Repo | Issue | Score | ROI | Effort (h) | Friction | Reward Signal | Income Summary | Risk | Next Action |",
+      "| ---: | --- | --- | --- | --- | ---: | ---: | ---: | ---: | --- | --- | --- | --- |",
     );
     for (const decision of shortlist) {
       const candidate = byId.get(decision.candidate_id);
       const rewardSignal = formatRewardSignal(candidate);
       lines.push(
-        `| ${decision.rank ?? ""} | ${decision.verdict} | ${candidate?.repo_owner ?? "unknown"}/${candidate?.repo_name ?? "unknown"} | ${escapeCell(candidate?.issue_title ?? decision.candidate_id)} | ${decision.score ?? ""} | ${formatRoiCell(candidate?.roi_score)} | ${formatEffortCell(candidate?.estimated_effort_hours)} | ${escapeCell(rewardSignal)} | ${escapeCell(formatIncomeDisplay(candidate, decision.income_summary))} | ${escapeCell(decision.risk_summary ?? "")} | ${escapeCell(decision.human_next_action ?? "")} |`,
+        `| ${decision.rank ?? ""} | ${decision.verdict} | ${candidate?.discovery_source ?? "unknown"} | ${candidate?.repo_owner ?? "unknown"}/${candidate?.repo_name ?? "unknown"} | ${escapeCell(candidate?.issue_title ?? decision.candidate_id)} | ${decision.score ?? ""} | ${formatRoiCell(candidate)} | ${formatEffortCell(candidate?.estimated_effort_hours)} | ${formatFrictionCell(candidate?.claim_friction_score)} | ${escapeCell(rewardSignal)} | ${escapeCell(formatIncomeDisplay(candidate, decision.income_summary))} | ${escapeCell(decision.risk_summary ?? "")} | ${escapeCell(decision.human_next_action ?? "")} |`,
       );
     }
   } else {
@@ -325,28 +326,42 @@ function shortlistDecisions(decisions, options = {}) {
     const verdictCompare = VERDICT_ORDER[a.verdict] - VERDICT_ORDER[b.verdict];
     if (verdictCompare !== 0) return verdictCompare;
 
-    const sortKey = (decision) => {
-      const candidate = candidateById.get(decision.candidate_id);
-      if (rankShortlistBy === "roi") {
-        return candidate?.roi_score ?? 0;
-      }
-      if (rankShortlistBy === "payout") {
-        return candidate?.estimated_reward_usd ?? 0;
-      }
-      return decision.score ?? 0;
-    };
+    const sortKey = (decision) => resolveRankingKey(candidateById.get(decision.candidate_id), rankShortlistBy);
 
     const keyCompare = sortKey(b) - sortKey(a);
     if (keyCompare !== 0) return keyCompare;
+
+    if (rankShortlistBy === "roi") {
+      const frictionA = candidateById.get(a.candidate_id)?.claim_friction_score ?? 0;
+      const frictionB = candidateById.get(b.candidate_id)?.claim_friction_score ?? 0;
+      if (frictionB !== frictionA) {
+        return frictionB - frictionA;
+      }
+    }
+
     return (b.score ?? 0) - (a.score ?? 0);
   });
 }
 
-function formatRoiCell(value) {
+function formatRoiCell(candidate) {
+  if (!candidate) {
+    return "";
+  }
+  if (candidate.roi_score !== null && candidate.roi_score !== undefined) {
+    return Number(candidate.roi_score).toFixed(2);
+  }
+  if (candidate.roi_score_inferred !== null && candidate.roi_score_inferred !== undefined) {
+    const label = candidate.roi_confidence && candidate.roi_confidence !== "USD" ? candidate.roi_confidence : "inferred";
+    return `~${Number(candidate.roi_score_inferred).toFixed(2)} (${label})`;
+  }
+  return "";
+}
+
+function formatFrictionCell(value) {
   if (value === null || value === undefined) {
     return "";
   }
-  return Number(value).toFixed(2);
+  return String(value);
 }
 
 function formatEffortCell(value) {
@@ -361,14 +376,14 @@ function renderRecommendedTable(decisions, candidates, evidence, discoveryIntent
   const evidenceByCandidateId = evidenceIdsByCandidate(evidence);
   if (discoveryIntent === "rewarded") {
     const rows = [
-      "| Rank | Verdict | Repo | Stack | Issue | Link | Score | Reward Signal | Income Summary | Risk | Evidence IDs | Human Next Action |",
-      "| ---: | --- | --- | --- | --- | --- | ---: | --- | --- | --- | --- | --- |",
+      "| Rank | Verdict | Source | Repo | Stack | Issue | Link | Score | ROI | Friction | Reward Signal | Income Summary | Risk | Evidence IDs | Human Next Action |",
+      "| ---: | --- | --- | --- | --- | --- | --- | ---: | ---: | ---: | --- | --- | --- | --- | --- |",
     ];
     for (const decision of decisions) {
       const candidate = byId.get(decision.candidate_id);
       const evidenceIds = evidenceByCandidateId.get(decision.candidate_id) ?? [];
       rows.push(
-        `| ${decision.rank ?? ""} | ${decision.verdict} | ${candidate?.repo_owner}/${candidate?.repo_name} | ${candidate?.primary_language ?? "unknown"} | ${escapeCell(candidate?.issue_title ?? decision.candidate_id)} | ${candidate?.issue_url ?? ""} | ${decision.score ?? ""} | ${escapeCell(formatRewardSignal(candidate))} | ${escapeCell(formatIncomeDisplay(candidate, decision.income_summary))} | ${escapeCell(decision.risk_summary)} | ${escapeCell(evidenceIds.join(", "))} | ${escapeCell(decision.human_next_action)} |`,
+        `| ${decision.rank ?? ""} | ${decision.verdict} | ${candidate?.discovery_source ?? "unknown"} | ${candidate?.repo_owner}/${candidate?.repo_name} | ${candidate?.primary_language ?? "unknown"} | ${escapeCell(candidate?.issue_title ?? decision.candidate_id)} | ${candidate?.issue_url ?? ""} | ${decision.score ?? ""} | ${formatRoiCell(candidate)} | ${formatFrictionCell(candidate?.claim_friction_score)} | ${escapeCell(formatRewardSignal(candidate))} | ${escapeCell(formatIncomeDisplay(candidate, decision.income_summary))} | ${escapeCell(decision.risk_summary)} | ${escapeCell(evidenceIds.join(", "))} | ${escapeCell(decision.human_next_action)} |`,
       );
     }
     return rows.join("\n");

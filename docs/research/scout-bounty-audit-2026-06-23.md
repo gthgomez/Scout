@@ -217,6 +217,23 @@ An earlier nocache benchmark on 2026-06-23 (`generated_at` ~05:11–05:31Z) show
 ### Notes
 
 P0 pacing/backoff eliminated the prior 403 cascade (9 backoff events, 0×403). Remaining Wave 2 gaps: three broad `include_queries` still did not contribute candidates, `run_status` stayed `partial` (formance 422 + incomplete broad coverage), and Wave 5 still lacks an Algora platform-url handoff candidate.
+
+## Benchmark cadence (post 0.5.5)
+
+| Cadence | Command | Purpose |
+|---------|---------|---------|
+| Daily (cached) | `scout monitor --profile rewarded-cash-in --skip-known --notify` | Actionable GREEN changes without full nocache cost |
+| Weekly (nocache) | `node scripts/benchmark-rewarded-hunt.mjs --lane nocache` | Precision + reliability audit |
+| Local dev | `scout profile run rewarded-hunt-dev --limit 15` | Fast iteration with cache |
+
+### Precision targets (`.scout/benchmark-rewarded-hunt.json`)
+
+| Metric | Target |
+|--------|--------|
+| `max_spam_farm_green` | `0` |
+| `min_green_from_trusted_or_platform_pct` | `0.8` |
+| `candidates_with_platform_url` | `≥1` (Wave 5 / Algora enrich gate) |
+
 ## Related documents
 
 - [Discovery reliability design](discovery-reliability-design.md)

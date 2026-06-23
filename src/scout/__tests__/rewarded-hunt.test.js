@@ -16,16 +16,19 @@ describe("rewarded-hunt preset", () => {
       labels: [],
       seed_reward_labels: SEED_REWARD_LABELS,
       max_issues_per_query: 5,
+      max_issues_per_broad_query: 2,
+      min_seed_candidate_slots: 5,
       interleave_discovery_queries: true,
       reserve_broad_query_slots: 15,
       prefetch_contributing: true,
       search_pace_ms: 5000,
+      exclude_repos: ["Scottcjn/rustchain-bounties"],
       trusted_seed_lists: ["rewarded-programs", "rewarded-programs-algora"],
       include_queries: [
         "is:issue state:open label:algora no:assignee stars:>500",
-        "is:issue state:open label:bounty no:assignee stars:>1000",
         "is:issue state:open label:issuehunt no:assignee stars:>500",
         'is:issue state:open "algora.io" in:body no:assignee stars:>500',
+        "is:issue state:open label:bounty no:assignee stars:>1000",
       ],
       require_verified_reward: false,
       require_trusted_seed: false,
@@ -33,6 +36,7 @@ describe("rewarded-hunt preset", () => {
       queries_prioritize_seeds: true,
       broad_green_min_usd: 25,
       require_trusted_or_platform_for_broad_green: true,
+      green_requires_platform_or_trusted: true,
       shortlist_verdicts: ["GREEN", "YELLOW"],
     });
   });
@@ -60,6 +64,20 @@ describe("rewarded-hunt preset", () => {
   it("defaults rank_shortlist_by to roi on rewarded-hunt profile", () => {
     const profile = createSearchProfile({ name: "rewarded-hunt" });
     assert.equal(profile.rank_shortlist_by, "roi");
+  });
+
+  it("rewarded-cash-in preset requires GREEN-only trusted or platform shortlist", () => {
+    const preset = presetDefaults("rewarded-cash-in");
+    assert.equal(preset.shortlist_verdicts.join(","), "GREEN");
+    assert.equal(preset.green_requires_platform_or_trusted, true);
+    assert.equal(preset.rank_shortlist_by, "roi");
+  });
+
+  it("rewarded-hunt-dev preset caps candidates and broad queries for local iteration", () => {
+    const preset = presetDefaults("rewarded-hunt-dev");
+    assert.equal(preset.max_candidates, 15);
+    assert.equal(preset.include_queries.length, 2);
+    assert.equal(preset.algora_platform_enrich, false);
   });
 
   it("builds label-scoped seed queries when profile labels are empty", async () => {
