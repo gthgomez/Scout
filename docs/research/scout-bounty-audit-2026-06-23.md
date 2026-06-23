@@ -158,6 +158,57 @@ See [`bounty-claim-runbook.md`](../../src/scout/runbooks/bounty-claim-runbook.md
 
 ---
 
+
+---
+
+## Benchmark 0.4.7
+
+**Branch:** `scout/0.4.7-discovery-green`  
+**Date (UTC):** 2026-06-23  
+**Preflight:** `npm test` — 270 pass / 0 fail  
+**Command:** `node scripts/benchmark-rewarded-hunt.mjs --lane nocache`  
+**Artifact:** [`.scout/benchmark-rewarded-hunt.json`](../../.scout/benchmark-rewarded-hunt.json) (`generated_at`: 2026-06-23T05:11:08.679Z)  
+**Elapsed:** ~1,120,681 ms (~18.7 min)  
+**403 tuning iteration:** not run — `collection_error_403_rate` met target on first run.
+
+### Gate vs targets
+
+| Target | Criterion | Actual | Result |
+|--------|-----------|--------|--------|
+| No secondary 403s | `collection_error_403_rate === 0` | `0` (0/1 collection errors; sole failure was HTTP 422) | **Pass** |
+| Broad discovery | `broad_queries_executed >= 3` | `0` (expected 4 `include_queries`) | **Fail** |
+| Actionable shortlist | `shortlist_green + shortlist_yellow >= 3` | `3 + 0 = 3` | **Pass** |
+| Run completeness | `run_status === "complete"` | `partial` | **Fail** |
+
+**Wave 2 benchmark gate (all four):** **Fail** (2/4 targets).
+
+### Key metrics (nocache lane)
+
+| Metric | Value |
+|--------|-------|
+| `cli_exit_code` | 0 |
+| `search_audit_observed` / `search_audit_failed` | 19 / 1 |
+| `rate_limit_backoff_events` | 9 |
+| `collection_error_count` | 1 |
+| `collection_error_403_count` | 0 |
+| `candidate_count` | 5 |
+| `candidates_with_verified_reward` | 5 |
+| `candidates_with_platform_url` | 0 |
+| `shortlist_green` / `shortlist_yellow` / `shortlist_gray` / `shortlist_red` | 3 / 0 / 0 / 2 |
+| `discovered_by_query_counts` | `is:issue state:open label:bounty no:assignee stars:>1000` → 5 |
+| Failed query | `repo:formancehq/formance … label:"algora" …` → **422** (not 403) |
+
+### Algora / Wave 5 signal
+
+- **No Algora platform-url candidates** (`candidates_with_platform_url: 0`).
+- Seed query referencing `label:"algora"` on `formancehq/formance` did not return results (422 validation failure).
+- **Algora shortlist candidates for Wave 5 gate:** **none observed** on this run.
+
+### Notes
+
+P0 pacing/backoff appears to have eliminated the prior 403 cascade (9 backoff events, 0×403). Remaining gaps: broad `include_queries` still did not contribute candidates (`broad_queries_executed: 0`), and `run_status` stayed `partial` due to the single failed search plus incomplete broad coverage.
+
+
 ## Related documents
 
 - [Discovery reliability design](discovery-reliability-design.md)
