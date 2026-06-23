@@ -1,5 +1,11 @@
 import { resolveDiscoveryIntent } from "./profiles.js";
 import { validateHandoffPackage } from "./validators.js";
+import {
+  buildAcceptanceCriteriaSummary,
+  buildSuggestedBranchName,
+  extractPlatformClaimInfo,
+  getClaimSteps,
+} from "./claim-steps.js";
 
 const CONFIDENCE_CATEGORIES = Object.freeze([
   "metadata",
@@ -26,6 +32,14 @@ export function createDecisionCockpitModel(report) {
       const candidateAttempts = attempts.filter((item) => item.candidate_id === decision.candidate_id);
       const confidence = confidenceFor({ candidate, decision, evidence: candidateEvidence, attempts: candidateAttempts, discoveryIntent });
       const handoffPackage = buildHandoffPackage({ candidate, decision, evidence: candidateEvidence, discoveryIntent });
+      const rewardedMetrics =
+        discoveryIntent === "rewarded"
+          ? {
+              roi_score: candidate?.roi_score ?? null,
+              estimated_effort_hours: candidate?.estimated_effort_hours ?? null,
+              claim_friction_score: candidate?.claim_friction_score ?? null,
+            }
+          : {};
       return {
         candidate_id: decision.candidate_id,
         verdict: decision.verdict,
@@ -35,6 +49,7 @@ export function createDecisionCockpitModel(report) {
         issue_url: candidate?.issue_url ?? "",
         discovery_intent: decision.discovery_intent ?? discoveryIntent,
         income_summary: decision.income_summary ?? null,
+        ...rewardedMetrics,
         confidence,
         reward_signal_label: formatRewardSignalLabel(confidence.reward_signal),
         why_not_green: whyNotGreen({ candidate, decision, confidence, discoveryIntent }),
@@ -122,7 +137,7 @@ export function exportHandoffPackages(report, options = {}) {
   });
 
   const handoff = {
-    schema_version: "1.1",
+    schema_version: model.discovery_intent === "rewarded" ? "1.2" : "1.1",
     entrypoint: "handoff_package.json",
     generated_at: model.generated_at,
     discovery_intent: model.discovery_intent,
@@ -133,6 +148,7 @@ export function exportHandoffPackages(report, options = {}) {
       model.discovery_intent === "rewarded"
         ? "Scout does not verify payout amounts, bounty platform terms, or sponsor obligations."
         : null,
+    ...(model.discovery_intent === "rewarded" ? { claim_workflow_version: "1.0" } : {}),
     recommended_packages: recommended,
     suggested_commands: recommended.map((candidateId) => ({
       kind: "readonly_cli",
@@ -199,6 +215,13 @@ export function renderDecisionCockpitSection(model, options = {}) {
       `- Issue: ${item.issue_url}`,
       `- Confidence: ${confidence}`,
       ...(item.income_summary ? [`- Income summary: ${item.income_summary}`] : []),
+      ...(model.discovery_intent === "rewarded" && item.roi_score !== undefined
+        ? [
+            `- ROI score: ${item.roi_score ?? "n/a"}`,
+            `- Estimated effort (hours): ${item.estimated_effort_hours ?? "n/a"}`,
+            `- Claim friction score: ${item.claim_friction_score ?? "n/a"}`,
+          ]
+        : []),
       `- Why not GREEN: ${item.why_not_green.join("; ") || "No current blocker."}`,
       `- What would change my mind: ${item.what_would_change_my_mind.join("; ") || "No extra evidence required."}`,
       `- Next evidence action: ${item.next_evidence_action.action} - ${item.next_evidence_action.reason}`,
@@ -286,7 +309,7 @@ function nextEvidenceAction(candidate, decision) {
 }
 
 function buildHandoffPackage({ candidate, decision, evidence, discoveryIntent }) {
-  return {
+  const base = {
     repo_url: candidate?.repo_url ?? "",
     issue_url: candidate?.issue_url ?? "",
     discovery_intent: discoveryIntent,
@@ -305,6 +328,26 @@ function buildHandoffPackage({ candidate, decision, evidence, discoveryIntent })
       discoveryIntent === "rewarded"
         ? "Reward metadata is inferred from GitHub labels/title/body only; verify payout terms manually."
         : "Beginner-fit candidate; confirm setup docs before claiming.",
+  };
+
+  if (discoveryIntent !== "rewarded") {
+    return base;
+  }
+
+  const rewardSignals = candidate?.reward_signals ?? [];
+  const { platform_claim_url, platform_name } = extractPlatformClaimInfo(rewardSignals);
+  const resolvedPlatform = platform_name ?? "unknown";
+
+  return {
+    ...base,
+    platform_claim_url,
+    platform_name: platform_claim_url ? resolvedPlatform : platform_name,
+    payout_verified_externally: false,
+    acceptance_criteria_summary: buildAcceptanceCriteriaSummary(candidate),
+    suggested_branch_name: buildSuggestedBranchName(candidate?.repo_owner, candidate?.issue_number),
+    claim_steps: getClaimSteps(resolvedPlatform),
+    roi_score: candidate?.roi_score ?? null,
+    estimated_effort_hours: candidate?.estimated_effort_hours ?? null,
   };
 }
 

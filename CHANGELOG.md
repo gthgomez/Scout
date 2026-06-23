@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.5.1] — Handoff package schema 1.2
+
+### Added
+- [`schemas/handoff-package-1.2.json`](schemas/handoff-package-1.2.json) — optional claim-workflow fields on package entries
+- `claim-steps.js` — static claim step templates per platform (`algora`, `issuehunt`, `opire`, `unknown`)
+- Rewarded handoff entry fields: `platform_claim_url`, `platform_name`, `payout_verified_externally`, `claim_steps`, `suggested_branch_name`, `roi_score`, `estimated_effort_hours`, `acceptance_criteria_summary`
+- Cockpit row display for `roi_score`, `estimated_effort_hours`, and `claim_friction_score` on rewarded sessions
+
+### Changed
+- `validateHandoffPackage()` accepts schema versions `1.1` and `1.2`
+- `exportHandoffPackages()` emits schema `1.2` when `discovery_intent === "rewarded"`, otherwise `1.1`
+
 ## [0.5.0] — ROI ranking and claim ledger
 
 ### Added

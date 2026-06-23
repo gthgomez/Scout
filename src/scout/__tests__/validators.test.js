@@ -364,6 +364,65 @@ describe("validators", () => {
     assert.throws(() => validateHandoffPackage({ ...handoff, schema_version: "9.9" }), /schema_version/);
   });
 
+  it("validates rewarded handoff package exports against schema 1.2 contract", () => {
+    const rewardedReport = {
+      ...reports.validReport,
+      discovery_intent: "rewarded",
+      candidates: [
+        {
+          ...reports.validReport.candidates[0],
+          has_verified_reward_signal: true,
+          has_observed_reward_metadata: true,
+          has_acceptance_criteria: true,
+          issue_body: "Fix the checkout flow and add tests.",
+          roi_score: 42,
+          estimated_effort_hours: 6,
+          claim_friction_score: 75,
+          reward_signals: [
+            {
+              kind: "platform_url",
+              platform: "algora",
+              value: "https://algora.io/bounties/acme/tooling/12",
+              confidence: "OBSERVED",
+              source_ref: "issue_body",
+            },
+          ],
+        },
+      ],
+      decisions: [
+        {
+          ...reports.validReport.decisions[0],
+          discovery_intent: "rewarded",
+          income_summary: "$200 inferred",
+        },
+      ],
+    };
+    const handoff = exportHandoffPackages(rewardedReport, {
+      shortlistLimit: 5,
+      workflowPresetEffective: "fast",
+    });
+    const validated = validateHandoffPackage(handoff);
+    assert.equal(validated.schema_version, "1.2");
+    assert.equal(validated.claim_workflow_version, "1.0");
+    const entry = validated.packages[0];
+    assert.equal(entry.platform_name, "algora");
+    assert.equal(entry.platform_claim_url, "https://algora.io/bounties/acme/tooling/12");
+    assert.equal(entry.payout_verified_externally, false);
+    assert.equal(entry.suggested_branch_name, "bounty/acme-12");
+    assert.ok(entry.claim_steps.length >= 3);
+    assert.equal(entry.roi_score, 42);
+    assert.equal(entry.estimated_effort_hours, 6);
+    assert.equal(entry.acceptance_criteria_summary, "Fix the checkout flow and add tests.");
+    assert.throws(
+      () =>
+        validateHandoffPackage({
+          ...handoff,
+          packages: [{ ...entry, payout_verified_externally: true }],
+        }),
+      /payout_verified_externally must not be true/,
+    );
+  });
+
   it("validates session manifest exports", () => {
     const manifest = createSessionManifest({
       sessionId: "scout_session",

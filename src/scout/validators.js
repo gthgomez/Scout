@@ -9,6 +9,7 @@ import {
   TRUST_LEVELS,
   VERDICTS,
 } from "./types.js";
+import { HANDOFF_PLATFORM_NAMES } from "./claim-steps.js";
 import { validateTrustedSeedListId } from "./seed-lists.js";
 import { WORKFLOW_STAGES } from "./session.js";
 import { resolveThresholds } from "./triage.js";
@@ -541,12 +542,13 @@ function validateArgv(command, name) {
 
 const HANDOFF_MODES = Object.freeze(["metadata_only", "static_verified"]);
 const WORKFLOW_PRESETS = Object.freeze(["fast", "full"]);
+const HANDOFF_SCHEMA_VERSIONS = Object.freeze(["1.1", "1.2"]);
 
 export function validateHandoffPackage(handoff) {
   assertObject(handoff, "HandoffPackage");
   assertString(handoff.schema_version, "HandoffPackage.schema_version");
-  if (handoff.schema_version !== "1.1") {
-    throw new Error("HandoffPackage.schema_version must be 1.1");
+  if (!HANDOFF_SCHEMA_VERSIONS.includes(handoff.schema_version)) {
+    throw new Error("HandoffPackage.schema_version must be 1.1 or 1.2");
   }
   if (handoff.entrypoint !== "handoff_package.json") {
     throw new Error("HandoffPackage.entrypoint must be handoff_package.json");
@@ -560,6 +562,9 @@ export function validateHandoffPackage(handoff) {
   assertEnum(handoff.workflow_preset, WORKFLOW_PRESETS, "HandoffPackage.workflow_preset");
   if (handoff.reward_disclaimer !== null && handoff.reward_disclaimer !== undefined) {
     assertString(handoff.reward_disclaimer, "HandoffPackage.reward_disclaimer");
+  }
+  if (handoff.claim_workflow_version !== null && handoff.claim_workflow_version !== undefined) {
+    assertString(handoff.claim_workflow_version, "HandoffPackage.claim_workflow_version");
   }
   assertArray(handoff.recommended_packages, "HandoffPackage.recommended_packages");
   handoff.recommended_packages.forEach((id, index) =>
@@ -578,11 +583,13 @@ export function validateHandoffPackage(handoff) {
     assertString(command.reason, `HandoffPackage.suggested_commands[${index}].reason`);
   });
   assertArray(handoff.packages, "HandoffPackage.packages");
-  handoff.packages.forEach((pkg, index) => validateHandoffPackageEntry(pkg, `HandoffPackage.packages[${index}]`));
+  handoff.packages.forEach((pkg, index) =>
+    validateHandoffPackageEntry(pkg, `HandoffPackage.packages[${index}]`, handoff.schema_version),
+  );
   return handoff;
 }
 
-function validateHandoffPackageEntry(pkg, name) {
+function validateHandoffPackageEntry(pkg, name, schemaVersion = "1.1") {
   assertObject(pkg, name);
   assertString(pkg.candidate_id, `${name}.candidate_id`);
   assertEnum(pkg.verdict, VERDICTS, `${name}.verdict`);
@@ -608,7 +615,60 @@ function validateHandoffPackageEntry(pkg, name) {
   assertArray(pkg.denied_actions, `${name}.denied_actions`);
   pkg.denied_actions.forEach((action, index) => assertString(action, `${name}.denied_actions[${index}]`));
   assertString(pkg.agent_notes, `${name}.agent_notes`);
+  validateOptionalHandoffEntryFields(pkg, name, schemaVersion);
   return pkg;
+}
+
+function validateOptionalHandoffEntryFields(pkg, name, schemaVersion) {
+  const optionalKeys = [
+    "platform_claim_url",
+    "platform_name",
+    "payout_verified_externally",
+    "acceptance_criteria_summary",
+    "suggested_branch_name",
+    "claim_steps",
+    "roi_score",
+    "estimated_effort_hours",
+  ];
+
+  for (const key of optionalKeys) {
+    if (!Object.hasOwn(pkg, key)) continue;
+    const value = pkg[key];
+    switch (key) {
+      case "platform_claim_url":
+      case "acceptance_criteria_summary":
+      case "suggested_branch_name":
+        if (value !== null && value !== undefined) {
+          assertString(value, `${name}.${key}`);
+        }
+        break;
+      case "platform_name":
+        if (value !== null && value !== undefined) {
+          assertEnum(value, HANDOFF_PLATFORM_NAMES, `${name}.platform_name`);
+        }
+        break;
+      case "payout_verified_externally":
+        if (value !== undefined && value !== null && typeof value !== "boolean") {
+          throw new Error(`${name}.payout_verified_externally must be a boolean`);
+        }
+        if (schemaVersion === "1.2" && value === true) {
+          throw new Error(`${name}.payout_verified_externally must not be true from Scout export`);
+        }
+        break;
+      case "claim_steps":
+        assertArray(value, `${name}.claim_steps`);
+        value.forEach((step, index) => assertString(step, `${name}.claim_steps[${index}]`));
+        break;
+      case "roi_score":
+      case "estimated_effort_hours":
+        if (value !== null && value !== undefined && typeof value !== "number") {
+          throw new Error(`${name}.${key} must be a number or null`);
+        }
+        break;
+      default:
+        break;
+    }
+  }
 }
 
 const WORKFLOW_PRESET_VALUES = Object.freeze(["fast", "full"]);

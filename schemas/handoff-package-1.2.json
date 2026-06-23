@@ -1,0 +1,122 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/gthgomez/Scout/schemas/handoff-package-1.2.json",
+  "title": "Scout Handoff Package",
+  "description": "Primary agent entrypoint artifact from scout workflow run or scout handoff. Extends 1.1 with optional claim-workflow fields for rewarded discovery.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "entrypoint",
+    "generated_at",
+    "discovery_intent",
+    "handoff_mode",
+    "handoff_mode_reason",
+    "workflow_preset",
+    "recommended_packages",
+    "suggested_commands",
+    "packages"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.2" },
+    "entrypoint": { "const": "handoff_package.json" },
+    "generated_at": { "type": "string", "format": "date-time" },
+    "discovery_intent": { "enum": ["beginner", "rewarded"] },
+    "handoff_mode": { "enum": ["metadata_only", "static_verified"] },
+    "handoff_mode_reason": { "type": ["string", "null"] },
+    "workflow_preset": { "enum": ["fast", "full"] },
+    "reward_disclaimer": { "type": ["string", "null"] },
+    "claim_workflow_version": { "type": "string" },
+    "recommended_packages": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "suggested_commands": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "command", "reason"],
+        "properties": {
+          "kind": { "const": "readonly_cli" },
+          "command": { "type": "string", "minLength": 1 },
+          "cwd": { "type": ["string", "null"] },
+          "reason": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "packages": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/handoffPackageEntry" }
+    }
+  },
+  "$defs": {
+    "handoffPackageEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "candidate_id",
+        "verdict",
+        "discovery_intent",
+        "income_summary",
+        "has_observed_reward_metadata",
+        "repo_url",
+        "issue_url",
+        "reward_signals",
+        "evidence_ids",
+        "risks",
+        "denied_commands",
+        "suggested_first_files",
+        "allowed_actions",
+        "denied_actions",
+        "agent_notes"
+      ],
+      "properties": {
+        "candidate_id": { "type": "string", "minLength": 1 },
+        "verdict": { "enum": ["GREEN", "YELLOW", "RED", "GRAY"] },
+        "discovery_intent": { "enum": ["beginner", "rewarded"] },
+        "income_summary": { "type": ["string", "null"] },
+        "has_observed_reward_metadata": { "type": "boolean" },
+        "repo_url": { "type": "string", "minLength": 1 },
+        "issue_url": { "type": "string", "minLength": 1 },
+        "reward_signals": { "type": "array" },
+        "evidence_ids": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "risks": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "denied_commands": { "type": "array" },
+        "suggested_first_files": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "allowed_actions": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "denied_actions": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "agent_notes": { "type": "string" },
+        "platform_claim_url": { "type": ["string", "null"] },
+        "platform_name": {
+          "type": ["string", "null"],
+          "enum": ["algora", "issuehunt", "opire", "unknown", null]
+        },
+        "payout_verified_externally": { "type": "boolean" },
+        "acceptance_criteria_summary": { "type": ["string", "null"] },
+        "suggested_branch_name": { "type": ["string", "null"] },
+        "claim_steps": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "roi_score": { "type": ["number", "null"] },
+        "estimated_effort_hours": { "type": ["number", "null"] }
+      }
+    }
+  }
+}

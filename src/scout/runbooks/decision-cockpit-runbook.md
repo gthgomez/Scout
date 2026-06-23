@@ -24,7 +24,7 @@ Review Scout triage output with confidence categories, why-not-GREEN reasoning, 
 ## Workflow
 1. Validate the report schema and decision coverage.
 2. Export the decision cockpit for human or agent review.
-3. Export `handoff_package.json` (schema 1.1) — start here for external coding agents. Read `recommended_packages`, `handoff_mode`, `workflow_preset`, and `suggested_commands` first. JSON Schema: [`schemas/handoff-package-1.1.json`](../../../schemas/handoff-package-1.1.json).
+3. Export `handoff_package.json` — schema **1.2** when `discovery_intent` is `rewarded`, otherwise **1.1**. Start here for external coding agents. Read `recommended_packages`, `handoff_mode`, `workflow_preset`, and `suggested_commands` first. JSON Schema: [`schemas/handoff-package-1.2.json`](../../../schemas/handoff-package-1.2.json) (rewarded) or [`schemas/handoff-package-1.1.json`](../../../schemas/handoff-package-1.1.json) (beginner).
 4. Check `handoff_mode` before handoff: `static_verified` only when archive fetch ran and at least one shortlist candidate has non-low `static_evidence` confidence; otherwise `metadata_only` (see `handoff_mode_reason`).
 5. Review cockpit confidence categories — especially `static_evidence` — before recommending any package for coding-agent handoff.
 6. For install/test planning, generate R2D network design text and install dry-run plans without executing them unless an approved registry probe is explicitly requested later.
@@ -33,6 +33,8 @@ Review Scout triage output with confidence categories, why-not-GREEN reasoning, 
 - Cockpit JSON includes confidence categories including `reward_signal` for rewarded profiles.
 - Cockpit markdown may show a **metadata-only handoff warning** when `handoff_mode` is `metadata_only` (fast preset, or full preset with failed/insufficient archive fetch).
 - Handoff packages list evidence IDs, denied actions, suggested first files, and agent notes.
+- Rewarded handoffs (schema 1.2) include `platform_claim_url`, `platform_name`, `claim_steps`, `suggested_branch_name`, `roi_score`, `estimated_effort_hours`, and `payout_verified_externally: false` on each entry.
+- Cockpit rows for rewarded sessions show `roi_score`, `estimated_effort_hours`, and `claim_friction_score`.
 - `handoff_mode` reflects evidence outcomes, not workflow intent; `workflow_preset` records which preset ran.
 - Rewarded handoffs include `income_summary` and a payout disclaimer.
 

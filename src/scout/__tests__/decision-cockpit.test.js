@@ -229,4 +229,70 @@ describe("R2G decision cockpit reports", () => {
     const output = renderDecisionCockpitSection(model);
     assert.ok(output.includes("reward_signal:high (observed in metadata)"));
   });
+
+  it("exports schema 1.2 rewarded handoff with claim workflow fields", () => {
+    const report = {
+      ...reportFixtures.validReport,
+      discovery_intent: "rewarded",
+      candidates: [
+        {
+          ...reportFixtures.validReport.candidates[0],
+          has_verified_reward_signal: true,
+          has_observed_reward_metadata: true,
+          has_acceptance_criteria: true,
+          issue_body: "Acceptance: patch the API handler.",
+          roi_score: 80,
+          estimated_effort_hours: 4,
+          claim_friction_score: 60,
+          reward_signals: [
+            {
+              kind: "platform_url",
+              platform: "issuehunt",
+              value: "https://issuehunt.io/r/issues/999",
+              confidence: "OBSERVED",
+              source_ref: "issue_body",
+            },
+          ],
+        },
+      ],
+      decisions: [
+        {
+          ...reportFixtures.validReport.decisions[0],
+          discovery_intent: "rewarded",
+          income_summary: "$150 inferred",
+        },
+      ],
+    };
+
+    const handoff = exportHandoffPackages(report, {
+      workflowPresetEffective: "fast",
+      handoffMode: "metadata_only",
+    });
+    assert.equal(handoff.schema_version, "1.2");
+    assert.equal(handoff.discovery_intent, "rewarded");
+    const entry = handoff.packages[0];
+    assert.equal(entry.platform_name, "issuehunt");
+    assert.equal(entry.payout_verified_externally, false);
+    assert.ok(entry.claim_steps.some((step) => step.includes("IssueHunt")));
+    assert.equal(entry.roi_score, 80);
+    assert.equal(entry.estimated_effort_hours, 4);
+
+    const model = createDecisionCockpitModel(report);
+    const output = renderDecisionCockpitSection(model);
+    assert.ok(output.includes("ROI score: 80"));
+    assert.ok(output.includes("Estimated effort (hours): 4"));
+    assert.ok(output.includes("Claim friction score: 60"));
+  });
+
+  it("keeps beginner exports on schema 1.1 without claim workflow fields", () => {
+    const handoff = exportHandoffPackages(reportFixtures.validReport, {
+      workflowPresetEffective: "fast",
+    });
+    assert.equal(handoff.schema_version, "1.1");
+    assert.equal(Object.hasOwn(handoff, "claim_workflow_version"), false);
+    const entry = handoff.packages[0];
+    assert.equal(Object.hasOwn(entry, "platform_claim_url"), false);
+    assert.equal(Object.hasOwn(entry, "claim_steps"), false);
+    assert.equal(Object.hasOwn(entry, "roi_score"), false);
+  });
 });
