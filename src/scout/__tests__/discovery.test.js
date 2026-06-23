@@ -249,24 +249,37 @@ describe("discovery mapping", () => {
 
   it("records GitHub search failures as collection errors", async () => {
     const collectionErrors = [];
-    const candidates = await discoverCandidates({
-      policy: defaultPolicy("metadata_only"),
-      queries: ["query"],
-      limit: 1,
-      fetchImpl: async () => ({
-        ok: false,
-        status: 403,
-        headers: { get: (name) => ({ "x-ratelimit-limit": "100", "x-ratelimit-remaining": "0" })[name.toLowerCase()] ?? null },
-        json: async () => ({}),
-      }),
-      collectionErrors,
-    });
+    const prevRetries = process.env.SCOUT_SEARCH_MAX_RETRIES;
+    process.env.SCOUT_SEARCH_MAX_RETRIES = "0";
+    try {
+      const candidates = await discoverCandidates({
+        policy: defaultPolicy("metadata_only"),
+        queries: ["query"],
+        limit: 1,
+        fetchImpl: async () => ({
+          ok: false,
+          status: 403,
+          headers: { get: (name) => ({
+            "x-ratelimit-limit": "100",
+            "x-ratelimit-remaining": "0",
+            "x-ratelimit-resource": "search",
+          })[name.toLowerCase()] ?? null },
+          text: async () => "API rate limit exceeded",
+          json: async () => ({}),
+        }),
+        collectionErrors,
+      });
 
-    assert.equal(candidates.length, 0);
-    assert.equal(collectionErrors.length, 1);
-    assert.equal(collectionErrors[0].operation, "github_search_read");
-    assert.equal(collectionErrors[0].rate_limit.remaining, 0);
-    assert.match(collectionErrors[0].message, /403/);
+      assert.equal(candidates.length, 0);
+      assert.equal(collectionErrors.length, 1);
+      assert.equal(collectionErrors[0].operation, "github_search_read");
+      assert.equal(collectionErrors[0].rate_limit.remaining, 0);
+      assert.equal(collectionErrors[0].error_kind, "primary_rate_limit");
+      assert.match(collectionErrors[0].message, /403/);
+    } finally {
+      if (prevRetries === undefined) delete process.env.SCOUT_SEARCH_MAX_RETRIES;
+      else process.env.SCOUT_SEARCH_MAX_RETRIES = prevRetries;
+    }
   });
 
   it("applies saved profile repo and org exclusions before enrichment", async () => {
@@ -376,6 +389,137 @@ describe("discovery mapping", () => {
     assert.equal(candidates.length, 0);
   });
 });
+
+describe("discovery query budgeting", () => {
+  it("caps items taken from each query when max_issues_per_query is set", async () => {
+    const seedQuery = "repo:appwrite/appwrite is:issue state:open no:assignee";
+    const broadQuery = "is:issue state:open label:bounty no:assignee";
+    const searchCalls = [];
+    const githubClient = {
+      searchIssues: async (query) => {
+        searchCalls.push(query);
+        const count = query === seedQuery ? 20 : 15;
+        return {
+          body: {
+            items: Array.from({ length: count }, (_, index) => searchItem(`acme/${query === seedQuery ? "seed" : "broad"}`, index + 1, query)),
+          },
+          rate_limit: null,
+        };
+      },
+      enrichCandidates: async (items) => items,
+    };
+
+    const candidates = await discoverCandidates({
+      policy: defaultPolicy("metadata_only"),
+      queries: [seedQuery, broadQuery],
+      limit: 50,
+      enrich: false,
+      profile: { max_issues_per_query: 5 },
+      githubClient,
+    });
+
+    assert.equal(candidates.length, 10);
+    assert.equal(candidates.filter((candidate) => candidate.discovered_by_query === seedQuery).length, 5);
+    assert.equal(candidates.filter((candidate) => candidate.discovered_by_query === broadQuery).length, 5);
+    assert.deepEqual(searchCalls, [seedQuery, broadQuery]);
+  });
+
+  it("interleaves one item per query per pass when interleave_discovery_queries is true", async () => {
+    const firstQuery = "query-a";
+    const secondQuery = "query-b";
+    const githubClient = {
+      searchIssues: async (query) => ({
+        body: {
+          items:
+            query === firstQuery
+              ? [
+                  searchItem("acme/first", 1, query, "item-query-a-1"),
+                  searchItem("acme/first", 2, query, "item-query-a-2"),
+                  searchItem("acme/first", 3, query, "item-query-a-3"),
+                ]
+              : [
+                  searchItem("acme/second", 1, query, "item-query-b-1"),
+                  searchItem("acme/second", 2, query, "item-query-b-2"),
+                  searchItem("acme/second", 3, query, "item-query-b-3"),
+                ],
+        },
+        rate_limit: null,
+      }),
+      enrichCandidates: async (items) => items,
+    };
+
+    const candidates = await discoverCandidates({
+      policy: defaultPolicy("metadata_only"),
+      queries: [firstQuery, secondQuery],
+      limit: 4,
+      enrich: false,
+      profile: { interleave_discovery_queries: true },
+      githubClient,
+    });
+
+    assert.deepEqual(
+      candidates.map((candidate) => candidate.issue_title),
+      ["item-query-a-1", "item-query-b-1", "item-query-a-2", "item-query-b-2"],
+    );
+  });
+
+  it("reserves broad-query slots so include_queries still run when seeds would fill the limit", async () => {
+    const seedQuery = {
+      query: "repo:appwrite/appwrite is:issue state:open no:assignee",
+      kind: "trusted_seed_list",
+      seed_list_id: "rewarded-programs",
+      repo: "appwrite/appwrite",
+    };
+    const broadQuery = "is:issue state:open label:algora no:assignee";
+    const searchCalls = [];
+    const githubClient = {
+      searchIssues: async (query) => {
+        searchCalls.push(query);
+        const repo = query === seedQuery.query ? "appwrite/appwrite" : "broad/repo";
+        const count = query === seedQuery.query ? 50 : 5;
+        return {
+          body: {
+            items: Array.from({ length: count }, (_, index) => searchItem(repo, index + 1, query)),
+          },
+          rate_limit: null,
+        };
+      },
+      enrichCandidates: async (items) => items,
+    };
+
+    const candidates = await discoverCandidates({
+      policy: defaultPolicy("metadata_only"),
+      queries: [seedQuery, broadQuery],
+      limit: 10,
+      enrich: false,
+      profile: {
+        reserve_broad_query_slots: 3,
+      },
+      githubClient,
+    });
+
+    assert.equal(candidates.length, 10);
+    assert.equal(candidates.filter((candidate) => candidate.discovered_by_query === broadQuery).length, 3);
+    assert.equal(candidates.filter((candidate) => candidate.discovered_by_query === seedQuery.query).length, 7);
+    assert.ok(searchCalls.includes(broadQuery));
+  });
+});
+
+function searchItem(repo, number, discoveredByQuery, title = `Issue ${number}`) {
+  const [repoOwner, repoName] = repo.split("/");
+  return {
+    repository_url: `https://api.github.com/repos/${repoOwner}/${repoName}`,
+    number,
+    title,
+    html_url: `https://github.com/${repoOwner}/${repoName}/issues/${number}`,
+    labels: [],
+    state: "open",
+    assignees: [],
+    created_at: "2026-06-01T00:00:00Z",
+    updated_at: "2026-06-02T00:00:00Z",
+    discovered_by_query: discoveredByQuery,
+  };
+}
 
 function okJson(body, headers = {}) {
   return {

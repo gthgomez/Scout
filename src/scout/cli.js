@@ -29,6 +29,7 @@ import { AuditLog } from "./audit-log.js";
 import { diffReports, loadMonitorSnapshot, saveMonitorSnapshot, buildKnownCandidatesMap, summarizeMonitorEvents, monitorHasActionableEvents } from "./monitor.js";
 import {
   createSearchProfile,
+  isProfilePreset,
   loadSearchProfile,
   queriesFromProfile,
   saveSearchProfile,
@@ -842,6 +843,9 @@ function splitArg(value) {
 }
 
 async function loadProfileOrDefault(name) {
+  if (isProfilePreset(name)) {
+    return createSearchProfile({ name });
+  }
   try {
     return await loadSearchProfile(name);
   } catch (error) {

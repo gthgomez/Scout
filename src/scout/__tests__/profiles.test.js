@@ -40,6 +40,29 @@ describe("search profiles", () => {
     assert.ok(queries.includes('is:issue state:open label:"documentation" no:assignee language:TypeScript') === false);
   });
 
+  it("prioritizes trusted seed-list queries when queries_prioritize_seeds is enabled", () => {
+    const profile = validateSearchProfile({
+      ...fixtures.searchProfile,
+      include_queries: ["is:issue state:open sort:updated-desc"],
+      labels: ["good first issue"],
+      languages: ["Python"],
+      trusted_seed_lists: ["starter-pack"],
+      queries_prioritize_seeds: true,
+    });
+    const queries = queriesFromProfile(profile, {
+      trustedSeedLists: [
+        {
+          seed_list_id: "starter-pack",
+          name: "Starter Pack",
+          repos: [{ repo: "pallets/flask", labels: ["good first issue"], languages: ["Python"] }],
+        },
+      ],
+    });
+
+    assert.equal(queries[0].kind, "trusted_seed_list");
+    assert.equal(queries[1], "is:issue state:open sort:updated-desc");
+  });
+
   it("builds include queries, seed-list queries, then broad generated queries", () => {
     const profile = validateSearchProfile({
       ...fixtures.searchProfile,
@@ -102,6 +125,61 @@ describe("search profiles", () => {
 
     assert.equal(queries.filter((query) => (typeof query === "string" ? query : query.query) === duplicatedSeedQuery).length, 1);
     assert.equal(queries[0], duplicatedSeedQuery);
+  });
+
+  it("collapses multi-label seed queries into one OR query per repo when languages are empty", () => {
+    const profile = validateSearchProfile({
+      ...fixtures.searchProfile,
+      labels: [],
+      languages: [],
+      include_queries: [],
+      seed_reward_labels: ["bounty", "reward", "algora"],
+      trusted_seed_lists: ["rewarded-programs"],
+    });
+    const queries = queriesFromProfile(profile, {
+      trustedSeedLists: [
+        {
+          seed_list_id: "rewarded-programs",
+          name: "Rewarded Programs",
+          repos: [{ repo: "appwrite/appwrite" }],
+        },
+      ],
+    });
+
+    assert.equal(queries.length, 1);
+    assert.equal(
+      queries[0].query,
+      'repo:appwrite/appwrite is:issue state:open (label:"bounty" OR label:"reward" OR label:"algora") no:assignee',
+    );
+  });
+
+  it("collapses multi-label seed queries into one OR query per language", () => {
+    const profile = validateSearchProfile({
+      ...fixtures.searchProfile,
+      labels: ["good first issue", "help wanted"],
+      languages: ["Python", "TypeScript"],
+      trusted_seed_lists: ["starter-pack"],
+    });
+    const queries = queriesFromProfile(profile, {
+      trustedSeedLists: [
+        {
+          seed_list_id: "starter-pack",
+          name: "Starter Pack",
+          repos: [{ repo: "pallets/flask" }],
+        },
+      ],
+    });
+
+    const seedQueries = queries.filter((query) => typeof query === "object" && query.kind === "trusted_seed_list");
+    assert.equal(seedQueries.length, 2);
+    assert.equal(
+      seedQueries[0].query,
+      'repo:pallets/flask is:issue state:open (label:"good first issue" OR label:"help wanted") no:assignee language:Python',
+    );
+    assert.equal(
+      seedQueries[1].query,
+      'repo:pallets/flask is:issue state:open (label:"good first issue" OR label:"help wanted") no:assignee language:TypeScript',
+    );
   });
 
   it("applies repo_size_filter to trusted seed list and broad profile queries", () => {

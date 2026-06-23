@@ -39,6 +39,8 @@ Subcommand help: `scout workflow --help`, `scout plan --help`, `scout probe --he
 - `scout workflow resume --session <dir>`
 - `scout profile create beginner-python-ts --intent beginner`
 - `scout profile create rewarded-typescript --intent rewarded --trusted-seed-lists rewarded-programs`
+- `scout profile run rewarded-trusted-only --limit 30` — curated OSS bounty programs only
+- `scout profile run rewarded-hunt --limit 30` — dual seed lists plus bounded Algora/bounty broad queries; inferred rewards OK
 - `scout run --safe --limit <n> --out <path>`
 - `scout discover --limit <n> --out <path> --json-out <json-path>`
 - `scout profile run <profile-id> --out <path> --json-out <json-path>`

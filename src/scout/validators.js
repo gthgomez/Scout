@@ -46,6 +46,13 @@ function assertFiniteInteger(value, name, options = {}) {
   }
 }
 
+function assertOptionalFiniteInteger(value, name, options = {}) {
+  if (value === null || value === undefined) {
+    return;
+  }
+  assertFiniteInteger(value, name, options);
+}
+
 function assertEnum(value, allowed, name) {
   if (!allowed.includes(value)) {
     throw new Error(`${name} must be one of: ${allowed.join(", ")}`);
@@ -145,6 +152,29 @@ export function validateSearchProfile(profile) {
       throw new Error("SearchProfile.require_verified_reward must be a boolean");
     }
   }
+  for (const field of [
+    "require_trusted_seed",
+    "rank_shortlist_by_payout",
+    "queries_prioritize_seeds",
+    "interleave_discovery_queries",
+    "require_trusted_or_platform_for_broad_green",
+    "prefetch_contributing",
+  ]) {
+    if (profile[field] !== undefined && typeof profile[field] !== "boolean") {
+      throw new Error(`SearchProfile.${field} must be a boolean`);
+    }
+  }
+  if (profile.seed_reward_labels !== undefined) {
+    assertArray(profile.seed_reward_labels, "SearchProfile.seed_reward_labels");
+    profile.seed_reward_labels.forEach((label, index) =>
+      assertString(label, `SearchProfile.seed_reward_labels[${index}]`),
+    );
+  }
+  assertOptionalFiniteInteger(profile.max_issues_per_query, "SearchProfile.max_issues_per_query", { min: 1 });
+  assertOptionalFiniteInteger(profile.reserve_broad_query_slots, "SearchProfile.reserve_broad_query_slots", { min: 0 });
+  assertOptionalFiniteInteger(profile.broad_green_min_usd, "SearchProfile.broad_green_min_usd", { min: 0 });
+  assertOptionalFiniteInteger(profile.search_pace_ms, "SearchProfile.search_pace_ms", { min: 0 });
+  assertOptionalFiniteInteger(profile.search_max_retries, "SearchProfile.search_max_retries", { min: 0 });
   if (profile.shortlist_verdicts !== undefined) {
     assertArray(profile.shortlist_verdicts, "SearchProfile.shortlist_verdicts");
     for (const verdict of profile.shortlist_verdicts) {
@@ -158,8 +188,20 @@ export function validateSearchProfile(profile) {
     ...profile,
     discovery_intent: discoveryIntent,
     require_verified_reward: profile.require_verified_reward ?? false,
+    require_trusted_seed: profile.require_trusted_seed ?? false,
+    rank_shortlist_by_payout: profile.rank_shortlist_by_payout ?? false,
+    queries_prioritize_seeds: profile.queries_prioritize_seeds ?? false,
+    seed_reward_labels: profile.seed_reward_labels ?? [],
+    max_issues_per_query: profile.max_issues_per_query ?? null,
+    interleave_discovery_queries: profile.interleave_discovery_queries ?? false,
+    reserve_broad_query_slots: profile.reserve_broad_query_slots ?? null,
+    broad_green_min_usd: profile.broad_green_min_usd ?? null,
+    require_trusted_or_platform_for_broad_green: profile.require_trusted_or_platform_for_broad_green ?? false,
     shortlist_verdicts: profile.shortlist_verdicts ?? ["GREEN", "YELLOW", "GRAY"],
     repo_size_filter: profile.repo_size_filter ?? null,
+    prefetch_contributing: profile.prefetch_contributing ?? false,
+    search_pace_ms: profile.search_pace_ms ?? null,
+    search_max_retries: profile.search_max_retries ?? null,
   };
 }
 

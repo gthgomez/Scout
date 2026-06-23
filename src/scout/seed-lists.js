@@ -4,6 +4,14 @@ import { fileURLToPath } from "node:url";
 
 const SEED_LIST_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 const REPO_NAME_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?\/[A-Za-z0-9._-]{1,100}$/;
+const SEARCH_QUERY_MAX_LENGTH = 256;
+const UNSAFE_SEARCH_QUERY_PATTERN = /[\r\n;`|${}<>\\]/;
+
+function hasUnsafeSearchQueryChars(query) {
+  return UNSAFE_SEARCH_QUERY_PATTERN.test(query) || query.includes("\0");
+}
+const REPO_SCOPE_PATTERN = /\brepo:[^\s]+\b/i;
+const ORG_SCOPE_PATTERN = /\borg:[^\s]+\b/i;
 
 export function seedListStoreDir(root = process.cwd()) {
   return join(root, ".scout", "seed-lists");
@@ -83,11 +91,56 @@ export function normalizeSeedRepo(entry, fieldName = "repo") {
   if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
     throw new Error(`Trusted seed-list ${fieldName} must be a repo string or object.`);
   }
-  return {
-    repo: validateRepoName(entry.repo, `${fieldName}.repo`),
+  const repo = validateRepoName(entry.repo, `${fieldName}.repo`);
+  const normalized = {
+    repo,
     labels: normalizeOptionalStringArray(entry.labels, `${fieldName}.labels`),
     languages: normalizeOptionalStringArray(entry.languages, `${fieldName}.languages`),
   };
+  if (entry.search_query !== undefined) {
+    normalized.search_query = validateSearchQuery(entry.search_query, {
+      repo,
+      fieldName: `${fieldName}.search_query`,
+    });
+  }
+  return normalized;
+}
+
+/**
+ * When a seed repo defines search_query, return that override query.
+ * Otherwise return null so callers apply default repo-scoped query logic.
+ */
+export function queriesForSeedRepo(seedRepo) {
+  if (!seedRepo?.search_query) {
+    return null;
+  }
+  return [seedRepo.search_query];
+}
+
+export function validateSearchQuery(query, options = {}) {
+  const fieldName = options.fieldName ?? "search_query";
+  if (typeof query !== "string" || query.trim().length === 0) {
+    throw new Error(`Trusted seed-list ${fieldName} must be a non-empty string.`);
+  }
+  const trimmed = query.trim();
+  if (trimmed.length > SEARCH_QUERY_MAX_LENGTH) {
+    throw new Error(`Trusted seed-list ${fieldName} exceeds maximum length.`);
+  }
+  if (hasUnsafeSearchQueryChars(trimmed)) {
+    throw new Error(`Trusted seed-list ${fieldName} contains unsafe characters.`);
+  }
+  if (!/\bis:issue\b/i.test(trimmed)) {
+    throw new Error(`Trusted seed-list ${fieldName} must include is:issue.`);
+  }
+  const hasRepoScope = REPO_SCOPE_PATTERN.test(trimmed);
+  const hasOrgScope = ORG_SCOPE_PATTERN.test(trimmed);
+  if (!hasRepoScope && !hasOrgScope) {
+    throw new Error(`Trusted seed-list ${fieldName} must be repo:- or org:-scoped.`);
+  }
+  if (options.repo) {
+    validateSearchQueryMatchesRepo(trimmed, options.repo, fieldName);
+  }
+  return trimmed;
 }
 
 export function validateRepoName(repoName, fieldName = "repo") {
@@ -106,6 +159,21 @@ function parseTrustedSeedList(raw, options) {
     return validateTrustedSeedList(JSON.parse(raw), options);
   } catch (error) {
     throw new Error(`Malformed trusted seed-list ${options.path}: ${error.message}`, { cause: error });
+  }
+}
+
+function validateSearchQueryMatchesRepo(query, repoName, fieldName) {
+  const [owner] = repoName.split("/");
+  const repoMatch = query.match(/\brepo:([^\s]+)/i);
+  if (repoMatch) {
+    if (repoMatch[1].toLowerCase() !== repoName.toLowerCase()) {
+      throw new Error(`Trusted seed-list ${fieldName} repo: scope must match seed repo ${repoName}.`);
+    }
+    return;
+  }
+  const orgMatch = query.match(/\borg:([^\s]+)/i);
+  if (orgMatch && orgMatch[1].toLowerCase() !== owner.toLowerCase()) {
+    throw new Error(`Trusted seed-list ${fieldName} org: scope must match seed repo owner ${owner}.`);
   }
 }
 

@@ -178,7 +178,7 @@ describe("rewarded seed list", () => {
     const seedList = await loadTrustedSeedList("rewarded-programs");
     assert.equal(seedList.seed_list_id, "rewarded-programs");
     assert.ok(seedList.repos.length >= 5);
-    assert.ok(seedList.repos.some((entry) => (entry.labels ?? []).includes("bounty")));
+    assert.ok(seedList.repos.some((entry) => entry.repo === "calcom/cal.com"));
   });
 });
 

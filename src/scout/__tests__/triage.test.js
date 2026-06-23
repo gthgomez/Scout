@@ -174,3 +174,115 @@ describe("triage ranking", () => {
     assert.equal(decision.drop_reason, "Work appears to require private credentials or paid services.");
   });
 });
+
+describe("broad-query GREEN quality gate", () => {
+  const rewardedBroadProfile = {
+    discovery_intent: "rewarded",
+    require_trusted_or_platform_for_broad_green: true,
+    broad_green_min_usd: 25,
+  };
+
+  function rustchainLabelOnlyCandidate() {
+    return {
+      ...fixtures.greenCandidate,
+      candidate_id: "SCOUT-rustchain-label-1",
+      repo_owner: "Scottcjn",
+      repo_name: "rustchain-bounties",
+      issue_title: "[BOUNTY: 5 RTC] Improve wallet sync reliability",
+      discovered_by_query: 'label:bounty is:issue state:open no:assignee',
+      has_verified_reward_signal: true,
+      has_inferred_reward_signal: true,
+      estimated_reward_usd: null,
+      reward_signals: [
+        { kind: "label", value: "bounty", confidence: "OBSERVED", source_ref: "label:bounty" },
+      ],
+      source_observations: [
+        ...(fixtures.greenCandidate.source_observations ?? []),
+        { kind: "reward_signal", value: "label:bounty", confidence: "OBSERVED" },
+      ],
+    };
+  }
+
+  function appwriteAlgoraCandidate() {
+    return {
+      ...fixtures.greenCandidate,
+      candidate_id: "SCOUT-appwrite-algora-1",
+      repo_owner: "appwrite",
+      repo_name: "appwrite",
+      discovered_by_query: 'label:algora is:issue state:open no:assignee',
+      has_verified_reward_signal: true,
+      has_inferred_reward_signal: true,
+      reward_signals: [
+        {
+          kind: "platform_url",
+          value: "https://console.algora.io/org/appwrite/bounties/abc123",
+          confidence: "OBSERVED",
+          source_ref: "issue_body",
+          platform: "algora",
+        },
+        { kind: "label", value: "algora", confidence: "OBSERVED", source_ref: "label:algora" },
+      ],
+      source_observations: [
+        ...(fixtures.greenCandidate.source_observations ?? []),
+        {
+          kind: "reward_signal",
+          value: "platform_url:https://console.algora.io/org/appwrite/bounties/abc123",
+          confidence: "OBSERVED",
+        },
+      ],
+    };
+  }
+
+  it("caps label-only broad-query candidates at YELLOW (rustchain-style)", () => {
+    const decision = triageCandidate(rustchainLabelOnlyCandidate(), {
+      profile: rewardedBroadProfile,
+      now: NOW,
+    });
+
+    assert.equal(decision.verdict, "YELLOW");
+    assert.ok(decision.risk_summary.includes("Broad-query reward candidate"));
+    assert.ok(decision.gap_codes.includes("REWARD_GAP"));
+  });
+
+  it("allows GREEN for broad-query candidates with platform URL (Appwrite + Algora)", () => {
+    const decision = triageCandidate(appwriteAlgoraCandidate(), {
+      profile: rewardedBroadProfile,
+      now: NOW,
+    });
+
+    assert.equal(decision.verdict, "GREEN");
+  });
+
+  it("keeps trusted-seed label-only candidates eligible for GREEN", () => {
+    const decision = triageCandidate(
+      {
+        ...rustchainLabelOnlyCandidate(),
+        discovered_by_query: "repo:appwrite/appwrite is:issue state:open no:assignee",
+        source_observations: [
+          ...(fixtures.greenCandidate.source_observations ?? []),
+          { kind: "trusted_seed_list", value: "rewarded-programs", repo: "appwrite/appwrite" },
+          { kind: "reward_signal", value: "label:bounty", confidence: "OBSERVED" },
+        ],
+      },
+      { profile: rewardedBroadProfile, now: NOW },
+    );
+
+    assert.equal(decision.verdict, "GREEN");
+  });
+
+  it("allows GREEN when broad candidate meets broad_green_min_usd", () => {
+    const decision = triageCandidate(
+      {
+        ...rustchainLabelOnlyCandidate(),
+        estimated_reward_usd: 50,
+        reward_signals: [
+          { kind: "label", value: "bounty", confidence: "OBSERVED", source_ref: "label:bounty" },
+          { kind: "amount", value: "$50", confidence: "OBSERVED", source_ref: "issue_title" },
+        ],
+      },
+      { profile: rewardedBroadProfile, now: NOW },
+    );
+
+    assert.equal(decision.verdict, "GREEN");
+  });
+});

@@ -17,4 +17,8 @@ $sw2 = [System.Diagnostics.Stopwatch]::StartNew()
 node src/scout/cli.js discover --limit 5 --enrich-mode auto --out .scout/bench_auto.md --json-out .scout/bench_auto.json 2>$null
 $sw2.Stop()
 Write-Host "Auto mode elapsed: $($sw2.ElapsedMilliseconds)ms"
+
+Write-Host "==> Scout rewarded-hunt benchmark (writes .scout/benchmark-rewarded-hunt.json)"
+node scripts/benchmark-rewarded-hunt.mjs
+
 Write-Host "Benchmark complete. Compare durations and GitHub API call counts in audit logs."

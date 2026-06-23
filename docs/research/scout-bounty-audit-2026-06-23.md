@@ -1,0 +1,158 @@
+# Scout bounty discovery audit — 2026-06-23
+
+Baseline audit for `rewarded-hunt` after 0.4.4 OR-collapse. Artifact: [`.scout/benchmark-rewarded-hunt.json`](../../.scout/benchmark-rewarded-hunt.json).
+
+## Executive summary
+
+| Finding | Severity |
+|---------|----------|
+| Query count reduced to 19 (target ≤25) | Pass |
+| 84–100% of search calls return 403 (secondary rate limit) | Critical fail |
+| Broad `include_queries` never contribute candidates | Critical fail |
+| 0 GREEN shortlist; 0–1 YELLOW | Fail vs target ≥3 |
+| Only `org:calcom` unlabeled issues discovered | Signal noise |
+
+**Root cause:** [`collectDiscoveryItems`](../../src/scout/discovery.js) fires ~19 GitHub search requests in a burst (&lt;1s). Primary search quota remains (27–29/30) while GitHub returns 403 for secondary rate limiting. OR-collapse fixed query *volume* but not request *cadence*.
+
+---
+
+## Phase 0.1 — Discovery reliability metrics
+
+### Targets vs actual (benchmark 2026-06-23)
+
+| Metric | Target | nocache lane | cached lane |
+|--------|--------|--------------|-------------|
+| Query count | ≤25 | 19 | 19 |
+| Search audit observed | ~19 | 3 | 6 |
+| Search audit failed | 0 | 16 | 13 |
+| 403 collection error rate | 0% | 100% | 100% |
+| `run_status` | `complete` | `partial` | `partial` |
+| Candidates | >0 with reward signal | 0 verified | 0 verified |
+| GREEN + YELLOW | ≥3 | 1 | 0 |
+| Broad queries in results | 3/3 | 0/3 | 0/3 |
+
+### Per-query discovery (nocache lane)
+
+| Query group | Succeeded | Failed (403) |
+|-------------|-----------|--------------|
+| `org:calcom` override | 1 (5 candidates) | 0 |
+| Seed OR (15 repos) | ~2 (appwrite, n8n in cached lane) | 13–16 |
+| Broad include (3) | 0 | 3 |
+
+### Code paths audited
+
+| Module | Behavior | Gap |
+|--------|----------|-----|
+| [`discovery.js`](../../src/scout/discovery.js) `collectDiscoveryItems` | Sequential search, no delay, no retry | P0 fix |
+| [`github-client.js`](../../src/scout/github-client.js) `maybeBackoff` | Only when `remaining < 10` on primary limit | Ignores secondary 403 |
+| [`profiles.js`](../../src/scout/profiles.js) `queriesForSeedRepo` | OR collapse live, 19 queries | OK |
+| [`discovery-query.js`](../../src/scout/discovery-query.js) | Interleave + broad slot reserve | OK for budget, not API pacing |
+
+### Benchmark harness
+
+- Script: [`scripts/benchmark-rewarded-hunt.mjs`](../../scripts/benchmark-rewarded-hunt.mjs)
+- Wired into [`scripts/benchmark-discovery.ps1`](../../scripts/benchmark-discovery.ps1)
+- Run: `node scripts/benchmark-rewarded-hunt.mjs`
+
+---
+
+## Phase 0.2 — Signal quality audit
+
+### Candidate tabulation (nocache lane, n=5)
+
+All candidates from `org:calcom is:issue state:open no:assignee`:
+
+| Repo | Verdict | `has_verified_reward` | `has_inferred_reward` | `gap_codes` |
+|------|---------|----------------------|----------------------|-------------|
+| calcom/sans#27 | GRAY | false | false | REWARD_GAP |
+| calcom/cal.diy#29623 | YELLOW | false | true | REWARD_GAP |
+| calcom/sans#26 | GRAY | false | false | REWARD_GAP |
+| calcom/sans#25 | GRAY | false | false | REWARD_GAP |
+| calcom/cal.diy#29610 | GRAY | false | false | REWARD_GAP |
+
+No `platform_url` signals. No bounty labels on returned issues.
+
+### False-negative / false-positive risks (validated)
+
+| Risk | Status | Evidence | Module |
+|------|--------|----------|--------|
+| Calcom org query returns non-bounty noise | **Confirmed** | 5/5 candidates lack verified reward | [`rewarded-programs.json`](../../src/scout/seed-lists/rewarded-programs.json) `search_query` |
+| Broad GREEN gate blocks label-only unknown repos | By design | N/A — broad queries never ran | [`triage.js`](../../src/scout/triage.js) `evaluateBroadGreenGate` |
+| Spam farms in broad search | Not exercised | Broad queries 403'd | [`bounty-spam.js`](../../src/scout/bounty-spam.js) |
+| Body amounts &lt;$25 discarded | By design | No candidates with body amounts | [`reward-signals.js`](../../src/scout/reward-signals.js) |
+| CONTRIBUTING hints only at static stage | **Confirmed** | Not invoked during discovery | [`contributing-reward-scan.js`](../../src/scout/contributing-reward-scan.js) |
+
+### Triage gate summary ([`triage.js`](../../src/scout/triage.js))
+
+Rewarded verdict flow:
+
+1. No reward signal → **GRAY** + `REWARD_GAP`
+2. Inferred only → **YELLOW**
+3. Verified + broad-discovered → `evaluateBroadGreenGate` (needs platform URL, title payout, or ≥$25)
+4. Verified + trusted seed → GREEN/YELLOW by score
+
+---
+
+## Phase 0.3 — Cash-in funnel gap
+
+Scout stops at handoff. Manual steps after GREEN:
+
+1. Open `handoff_package.json` / cockpit
+2. Verify payout on platform (Algora/IssueHunt) — **not automated**
+3. Clone, implement, PR — **agent harness**
+4. Claim + await merge/payout — **not in Scout**
+
+See [`bounty-claim-runbook.md`](../../src/scout/runbooks/bounty-claim-runbook.md) and [`handoff-schema-research.md`](handoff-schema-research.md).
+
+---
+
+## Gap matrix — current vs target
+
+| Funnel stage | Current | Target | Priority |
+|--------------|---------|--------|----------|
+| Search API reliability | Burst → 403 cascade | 100% queries succeed | P0 |
+| Seed query precision | Calcom org too broad | Label-scoped or repo-scoped bounty query | P1 |
+| Broad discovery | Blocked by 403 | 3 broad queries contribute candidates | P0 |
+| Reward signal recall | GitHub metadata only | + CONTRIBUTING prefetch, more platform URLs | P1 |
+| Platform verification | URL regex only | Optional API enrich (Algora) | P2 |
+| Shortlist quality | 0 GREEN on live runs | ≥3 actionable GREEN/YELLOW | P1 |
+| Ranking | Payout sort only | ROI (payout / effort) | P2 |
+| Recurring hunts | Manual CLI | Scheduled monitor + alerts | P2 |
+| Claim tracking | None | `.scout/claims/` ledger | P3 |
+
+---
+
+## Go / no-go memo (P2+ integrations)
+
+| Integration | Go? | Conditions |
+|-------------|-----|------------|
+| Search pacing + 403 retry in Scout core | **Go** | P0; no new auth; policy-safe |
+| Calcom seed query fix | **Go** | P1; seed-list JSON only |
+| CONTRIBUTING.md prefetch at discovery | **Conditional go** | 1 core API call per unique repo; profile flag `prefetch_contributing: true` |
+| Algora API enrich | **Research first** | Requires API ToS review, auth model, no scraping |
+| IssueHunt API | **Defer** | No clear public API; URL detection sufficient for P1 |
+| Claim ledger in `.scout/claims/` | **Go** | Harness-local; no GitHub writes |
+| Handoff schema 1.2 | **Go** | Optional fields only; backward compatible |
+| Auto-claim / auto-PR | **No** | Policy denied in Scout core |
+
+---
+
+## Recommended execution order
+
+1. Implement P0 search pacing + secondary-limit retry ([`discovery-reliability-design.md`](discovery-reliability-design.md))
+2. Re-run benchmark; confirm 0% 403 rate and broad query execution
+3. Fix calcom seed `search_query` with label OR clause
+4. Expand platform URL patterns ([`bounty-platforms.md`](bounty-platforms.md))
+5. Implement ROI ranking research fields ([`roi-ranking-design.md`](roi-ranking-design.md))
+6. Enable monitor cadence for `rewarded-hunt`
+7. Algora API spike only after P0–P1 green benchmark
+
+---
+
+## Related documents
+
+- [Discovery reliability design](discovery-reliability-design.md)
+- [Bounty platforms survey](bounty-platforms.md)
+- [ROI ranking design](roi-ranking-design.md)
+- [Handoff schema research](handoff-schema-research.md)
+- [Bounty claim runbook](../../src/scout/runbooks/bounty-claim-runbook.md)

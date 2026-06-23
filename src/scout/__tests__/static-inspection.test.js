@@ -302,6 +302,89 @@ describe("static inspection primitives", () => {
     assert.equal(empty.static_inspection_status, "insufficient_static_evidence");
     assert.equal(empty.collection_status, "PARTIAL");
   });
+
+  it("scans CONTRIBUTING.md for bounty program signals during archive inspection", async () => {
+    const policy = defaultPolicy("static_inspection");
+    const archive = createZipArchive([
+      {
+        path: "tooling-main/CONTRIBUTING.md",
+        content: [
+          "# Contributing",
+          "",
+          "We pay bounties through Algora.",
+          "Browse https://console.algora.io/bounties/preview/repo-bounty",
+        ].join("\n"),
+      },
+      { path: "tooling-main/README.md", content: "# Setup\nRun tests." },
+    ]);
+
+    const inspected = await inspectCandidateStaticArchive({
+      policy,
+      candidate: {
+        candidate_id: "SCOUT-contributing-bounty-1",
+        repo_owner: "acme",
+        repo_name: "tooling",
+        default_branch: "main",
+        source_observations: [],
+        collection_status: "OBSERVED",
+      },
+      fetchImpl: async () => ({
+        ok: true,
+        status: 200,
+        headers: { get: () => String(archive.byteLength) },
+        arrayBuffer: async () => archive.buffer.slice(archive.byteOffset, archive.byteOffset + archive.byteLength),
+      }),
+    });
+
+    assert.ok(
+      inspected.source_observations.some(
+        (item) => item.kind === "contributing_reward_program" && item.value === "bounty" && item.confidence === "INFERRED",
+      ),
+    );
+    assert.ok(
+      inspected.source_observations.some(
+        (item) => item.kind === "reward_signal" && item.value.startsWith("platform_url:https://console.algora.io/"),
+      ),
+    );
+  });
+
+  it("does not emit bounty observations from neutral CONTRIBUTING.md archives", async () => {
+    const policy = defaultPolicy("static_inspection");
+    const archive = createZipArchive([
+      {
+        path: "tooling-main/CONTRIBUTING.md",
+        content: "# Contributing\n\nOpen a pull request and follow the style guide.",
+      },
+      { path: "tooling-main/README.md", content: "# Setup\nRun tests." },
+    ]);
+
+    const inspected = await inspectCandidateStaticArchive({
+      policy,
+      candidate: {
+        candidate_id: "SCOUT-contributing-neutral-1",
+        repo_owner: "acme",
+        repo_name: "tooling",
+        default_branch: "main",
+        source_observations: [],
+        collection_status: "OBSERVED",
+      },
+      fetchImpl: async () => ({
+        ok: true,
+        status: 200,
+        headers: { get: () => String(archive.byteLength) },
+        arrayBuffer: async () => archive.buffer.slice(archive.byteOffset, archive.byteOffset + archive.byteLength),
+      }),
+    });
+
+    assert.equal(
+      inspected.source_observations.some((item) => item.kind === "contributing_reward_program"),
+      false,
+    );
+    assert.equal(
+      inspected.source_observations.some((item) => item.kind === "reward_signal"),
+      false,
+    );
+  });
 });
 
 function createZipArchive(entries) {

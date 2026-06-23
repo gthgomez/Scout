@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { inflateRawSync } from "node:zlib";
 import { assertAllowed } from "./policy.js";
+import { scanContributingRewardProgram } from "./contributing-reward-scan.js";
 import {
   analyzeStaticFileSetupIntelligence,
   mergeSetupIntelligence,
@@ -689,6 +690,9 @@ function analyzeStaticFileContent(filePath, content) {
   if (/^(?:readme|contributing)(?:\.[a-z0-9._-]+)?$/i.test(filePath) || lowerPath.startsWith("docs/")) {
     if (/\b(setup|install|getting started|development|test)\b/i.test(text)) {
       observations.push({ kind: "setup_docs", value: `${filePath} contains setup or development guidance.` });
+    }
+    if (/^contributing(?:\.[a-z0-9._-]+)?$/i.test(filePath.split("/").pop() ?? filePath)) {
+      observations.push(...scanContributingRewardProgram(text, filePath));
     }
     if (/\b(ignore (?:all )?(?:previous|prior) instructions|reveal (?:the )?(?:secret|token|password)|disable (?:logs|logging|audit)|fetch remote (?:instructions|rules)|system prompt)\b/i.test(text)) {
       observations.push({ kind: "prompt_injection_risk", value: `${filePath} contains prompt-injection style operational instructions.` });

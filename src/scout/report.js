@@ -229,8 +229,9 @@ export function selectShortlistDecisions(report, options = {}) {
   const profile = report.profile ?? {};
   const allowedVerdicts = new Set(profile.shortlist_verdicts ?? ["GREEN", "YELLOW", "GRAY"]);
   const byId = candidateById(report.candidates);
+  const rankByPayout = profile.rank_shortlist_by_payout === true;
 
-  return shortlistDecisions(report.decisions)
+  return shortlistDecisions(report.decisions, { rankByPayout, candidateById: byId })
     .filter((decision) => decision.verdict !== "RED" && allowedVerdicts.has(decision.verdict))
     .filter((decision) => {
       if (!profile.require_verified_reward) return true;
@@ -261,7 +262,7 @@ export function exportShortlist(report, options = {}) {
       const candidate = byId.get(decision.candidate_id);
       const rewardSignal = formatRewardSignal(candidate);
       lines.push(
-        `| ${decision.rank ?? ""} | ${decision.verdict} | ${candidate?.repo_owner ?? "unknown"}/${candidate?.repo_name ?? "unknown"} | ${escapeCell(candidate?.issue_title ?? decision.candidate_id)} | ${decision.score ?? ""} | ${escapeCell(rewardSignal)} | ${escapeCell(decision.income_summary ?? "")} | ${escapeCell(decision.risk_summary ?? "")} | ${escapeCell(decision.human_next_action ?? "")} |`,
+        `| ${decision.rank ?? ""} | ${decision.verdict} | ${candidate?.repo_owner ?? "unknown"}/${candidate?.repo_name ?? "unknown"} | ${escapeCell(candidate?.issue_title ?? decision.candidate_id)} | ${decision.score ?? ""} | ${escapeCell(rewardSignal)} | ${escapeCell(formatIncomeDisplay(candidate, decision.income_summary))} | ${escapeCell(decision.risk_summary ?? "")} | ${escapeCell(decision.human_next_action ?? "")} |`,
       );
     }
   } else {
@@ -279,8 +280,29 @@ export function exportShortlist(report, options = {}) {
   return lines.join("\n");
 }
 
+function formatNonUsdReward(candidate) {
+  if (
+    candidate?.reward_currency &&
+    candidate.reward_currency !== "USD" &&
+    candidate.estimated_reward_amount != null
+  ) {
+    return `${candidate.estimated_reward_amount} ${candidate.reward_currency} (non-USD; verify payout)`;
+  }
+  return null;
+}
+
+function formatIncomeDisplay(candidate, incomeSummary) {
+  const nonUsd = formatNonUsdReward(candidate);
+  if (nonUsd) {
+    return incomeSummary ? `${nonUsd}; ${incomeSummary}` : nonUsd;
+  }
+  return incomeSummary ?? "";
+}
+
 function formatRewardSignal(candidate) {
   if (!candidate) return "none";
+  const nonUsd = formatNonUsdReward(candidate);
+  if (nonUsd) return nonUsd;
   if (candidate.has_verified_reward_signal) {
     return (candidate.reward_signals ?? [])
       .filter((signal) => signal.confidence === "OBSERVED")
@@ -295,10 +317,17 @@ function candidateById(candidates) {
   return new Map(candidates.map((candidate) => [candidate.candidate_id, candidate]));
 }
 
-function shortlistDecisions(decisions) {
+function shortlistDecisions(decisions, options = {}) {
+  const rankByPayout = options.rankByPayout === true;
+  const candidateById = options.candidateById ?? new Map();
   return [...decisions].sort((a, b) => {
     const verdictCompare = VERDICT_ORDER[a.verdict] - VERDICT_ORDER[b.verdict];
     if (verdictCompare !== 0) return verdictCompare;
+    if (rankByPayout) {
+      const payoutA = candidateById.get(a.candidate_id)?.estimated_reward_usd ?? 0;
+      const payoutB = candidateById.get(b.candidate_id)?.estimated_reward_usd ?? 0;
+      if (payoutB !== payoutA) return payoutB - payoutA;
+    }
     return (b.score ?? 0) - (a.score ?? 0);
   });
 }
@@ -315,7 +344,7 @@ function renderRecommendedTable(decisions, candidates, evidence, discoveryIntent
       const candidate = byId.get(decision.candidate_id);
       const evidenceIds = evidenceByCandidateId.get(decision.candidate_id) ?? [];
       rows.push(
-        `| ${decision.rank ?? ""} | ${decision.verdict} | ${candidate?.repo_owner}/${candidate?.repo_name} | ${candidate?.primary_language ?? "unknown"} | ${escapeCell(candidate?.issue_title ?? decision.candidate_id)} | ${candidate?.issue_url ?? ""} | ${decision.score ?? ""} | ${escapeCell(formatRewardSignal(candidate))} | ${escapeCell(decision.income_summary ?? "")} | ${escapeCell(decision.risk_summary)} | ${escapeCell(evidenceIds.join(", "))} | ${escapeCell(decision.human_next_action)} |`,
+        `| ${decision.rank ?? ""} | ${decision.verdict} | ${candidate?.repo_owner}/${candidate?.repo_name} | ${candidate?.primary_language ?? "unknown"} | ${escapeCell(candidate?.issue_title ?? decision.candidate_id)} | ${candidate?.issue_url ?? ""} | ${decision.score ?? ""} | ${escapeCell(formatRewardSignal(candidate))} | ${escapeCell(formatIncomeDisplay(candidate, decision.income_summary))} | ${escapeCell(decision.risk_summary)} | ${escapeCell(evidenceIds.join(", "))} | ${escapeCell(decision.human_next_action)} |`,
       );
     }
     return rows.join("\n");

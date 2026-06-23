@@ -1,5 +1,69 @@
 # Changelog
 
+## [0.4.6] — Bounty discovery P1
+
+### Added
+- `contributing-prefetch.js` — optional `prefetch_contributing` fetches CONTRIBUTING.md per repo during discovery enrichment
+- Profile fields: `prefetch_contributing`, `search_pace_ms`, `search_max_retries`
+- Opire platform URL detection in `reward-signals.js`
+- Broad `issuehunt` query on `rewarded-hunt` preset
+
+### Changed
+- Calcom seed `search_query` scopes org search to reward label OR clause (reduces non-bounty noise)
+- `rewarded-hunt` / `rewarded-trusted-only` enable CONTRIBUTING prefetch; `seed_reward_labels` includes `issuehunt`
+- GitHub client accepts profile-level search pace/retry overrides
+
+## [0.4.5] — Search pacing and retry
+
+### Added
+- `github-search-policy.js` — search pace/retry helpers (`SCOUT_SEARCH_PACE_MS`, `SCOUT_SEARCH_MAX_RETRIES`)
+- Collection errors include `error_kind` and `retry_count` for failed searches
+
+### Changed
+- `searchIssues` paces requests (default 2.5s between searches) and retries secondary-rate-limit 403/429 with backoff
+- Failed search responses capture response body for error classification
+
+## [0.4.4] — Seed query rate-limit fix
+
+### Changed
+- Seed-list query generation collapses multiple labels into one OR query per repo (one per language when languages are set), cutting `rewarded-hunt` from ~94 GitHub search calls to ~19
+
+### Fixed
+- `rewarded-hunt` and `rewarded-trusted-only` runs exhausting the 30/min GitHub search rate limit before broad `include_queries` execute (mass 403 collection errors)
+
+## [0.4.3] — Discovery fix sprint
+
+### Added
+- Profile fields: `seed_reward_labels`, `max_issues_per_query`, `interleave_discovery_queries`, `reserve_broad_query_slots`, `broad_green_min_usd`, `require_trusted_or_platform_for_broad_green`
+- `discovery-query.js` — query descriptor helpers (`isBroadDiscoveryCandidate`, interleave/slot budgeting)
+- `contributing-reward-scan.js` — CONTRIBUTING.md bounty/program signal scan in static inspection
+- Non-USD reward parsing: RTC, USDC, USDT title patterns; `estimated_reward_amount`, `reward_currency` on candidates
+- Seed repo `search_query` override — `calcom/cal.com` uses `org:calcom` scope to avoid GitHub search 422
+
+### Changed
+- `rewarded-hunt` and `rewarded-trusted-only` presets — label-scoped seed queries, per-query caps, interleaved discovery, reserved broad-query slots, broad GREEN quality gate (`broad_green_min_usd: 25`)
+- `discoverCandidates` — round-robin interleave, `max_issues_per_query`, `reserve_broad_query_slots` so broad bounty queries are not starved by seed repos
+- Broad-discovered GREEN requires platform URL, verified payout ≥ $25, or trusted seed; label-only unknown repos capped at YELLOW
+- Report shortlist shows non-USD reward currency with verify note
+
+### Fixed
+- Full `rewarded-hunt` runs returning 0 GREEN/YELLOW because Appwrite seed queries monopolized the discovery limit
+- `repo:calcom/cal.com` GitHub search 422 via org-scoped seed override
+
+## [0.4.2] — Bounty discovery sprint
+
+### Added
+- `rewarded-hunt` preset — dual seed lists (`rewarded-programs`, `rewarded-programs-algora`) plus bounded Algora/bounty broad queries; inferred rewards OK; payout-ranked shortlist
+- `rewarded-programs-algora` seed list — 7 curated Algora-active repos with no overlap against `rewarded-programs`
+- `extractPlatformUrls()` — Algora and IssueHunt URL detection as verified `platform_url` reward signals
+- `parseRewardAmount()` — contextual amount parsing with stack-trace false-positive filter (body-only amounts &lt; $25 discarded unless label or platform URL present)
+- `src/scout/reward-signals.js` module — labels → URLs → keywords → amounts orchestration in `extractRewardSignals`
+- Tests: `reward-signals.test.js`, `rewarded-hunt.test.js`; seed-list overlap coverage for Algora list
+
+### Changed
+- `has_verified_reward_signal` now treats `platform_url` signals as OBSERVED verification metadata
+- Docs: README, PROJECT_CONTEXT, discovery runbook — `rewarded-hunt` preset row
+
 ## [0.4.1] — Schemas + doc polish
 
 ### Added

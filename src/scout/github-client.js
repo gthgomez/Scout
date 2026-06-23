@@ -1,6 +1,15 @@
 import { mapPool, sleep } from "./async-pool.js";
 import { createGitHubCache } from "./github-cache.js";
 import { enrichCandidatesGraphql } from "./github-graphql.js";
+import {
+  classifySearchError,
+  computeSearchRetryDelayMs,
+  createSearchPacer,
+  isRetryableSearchError,
+  parseRetryAfterSeconds,
+  resolveSearchMaxRetries,
+  resolveSearchPaceMs,
+} from "./github-search-policy.js";
 import { gitHubHeaders, gitHubRateLimitFromHeaders } from "./github-rate-limit.js";
 
 const GRAPHQL_URL = "https://api.github.com/graphql";
@@ -26,6 +35,8 @@ export function createGitHubClient({
   enrichMode = null,
   auditLog = null,
   policy = null,
+  searchPaceMs = null,
+  searchMaxRetries = null,
 } = {}) {
   if (typeof fetchImpl !== "function") {
     throw new Error("A fetch implementation is required for GitHub client");
@@ -33,6 +44,7 @@ export function createGitHubClient({
 
   const cache = createGitHubCache({ cacheDir, enabled: cacheEnabled });
   let lastRateLimit = null;
+  const paceSearch = createSearchPacer(resolveSearchPaceMs(searchPaceMs));
 
   async function maybeBackoff(rateLimit) {
     if (!rateLimit || rateLimit.remaining === null || rateLimit.remaining >= 10) {
@@ -51,7 +63,19 @@ export function createGitHubClient({
     await sleep(waitMs);
   }
 
-  async function request(url, { headers = {}, method = "GET", body = null, cacheCategory = "metadata" } = {}) {
+  async function recordSearchBackoff(waitMs, error) {
+    if (auditLog && policy) {
+      auditLog.record({
+        operation: "rate_limit_backoff",
+        mode: policy.mode,
+        decision: "observed",
+        reason: `Search backoff ${waitMs}ms (${error.error_kind ?? classifySearchError(error)}, attempt=${error.retry_count ?? 0}).`,
+      });
+    }
+    await sleep(waitMs);
+  }
+
+  async function request(url, { headers = {}, method = "GET", body = null, cacheCategory = "metadata", captureErrorBody = false } = {}) {
     const { key, entry } = await cache.getUrl(url, cacheCategory);
     if (entry?.body !== undefined && entry.status === 200) {
       lastRateLimit = entry.rate_limit ?? lastRateLimit;
@@ -89,9 +113,14 @@ export function createGitHubClient({
     }
 
     if (!response.ok) {
+      const errorBody = captureErrorBody && typeof response.text === "function" ? await response.text() : "";
       const error = new Error(`GitHub API request failed for ${url} with status ${response.status ?? "unknown"}`);
       error.rate_limit = rateLimit;
       error.status = response.status;
+      if (captureErrorBody) {
+        error.body = errorBody;
+        error.retry_after = parseRetryAfterSeconds(response.headers);
+      }
       throw error;
     }
 
@@ -143,7 +172,27 @@ export function createGitHubClient({
     const url = new URL("https://api.github.com/search/issues");
     url.searchParams.set("q", query);
     url.searchParams.set("per_page", String(perPage));
-    return request(url.toString(), { cacheCategory: "search" });
+    const urlString = url.toString();
+    const maxRetries = resolveSearchMaxRetries(searchMaxRetries);
+    let lastError = null;
+
+    for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+      await paceSearch();
+      try {
+        return await request(urlString, { cacheCategory: "search", captureErrorBody: true });
+      } catch (error) {
+        error.retry_count = attempt;
+        error.error_kind = classifySearchError(error);
+        lastError = error;
+        if (attempt >= maxRetries || !isRetryableSearchError(error)) {
+          throw error;
+        }
+        const waitMs = computeSearchRetryDelayMs(attempt, error.retry_after);
+        await recordSearchBackoff(waitMs, error);
+      }
+    }
+
+    throw lastError ?? new Error("GitHub search failed after retries.");
   }
 
   async function fetchJson(url, options = {}) {

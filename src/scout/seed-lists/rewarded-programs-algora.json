@@ -1,0 +1,13 @@
+{
+  "seed_list_id": "rewarded-programs-algora",
+  "name": "Algora-active OSS programs",
+  "repos": [
+    { "repo": "twentyhq/twenty" },
+    { "repo": "PostHog/posthog" },
+    { "repo": "supabase/supabase" },
+    { "repo": "makeplane/plane" },
+    { "repo": "formancehq/formance" },
+    { "repo": "zio/zio" },
+    { "repo": "golemcloud/golem" }
+  ]
+}

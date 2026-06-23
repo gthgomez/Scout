@@ -4,39 +4,15 @@
   "repos": [
     {
       "repo": "calcom/cal.com",
-      "labels": ["bounty", "reward"]
+      "search_query": "org:calcom is:issue state:open (label:\"bounty\" OR label:\"reward\" OR label:\"algora\" OR label:\"paid\" OR label:\"sponsor\" OR label:\"issuehunt\" OR label:\"💰\") no:assignee"
     },
-    {
-      "repo": "appwrite/appwrite",
-      "labels": ["bounty", "reward"]
-    },
-    {
-      "repo": "n8n-io/n8n",
-      "labels": ["bounty", "reward"]
-    },
-    {
-      "repo": "medusajs/medusa",
-      "labels": ["bounty", "reward"]
-    },
-    {
-      "repo": "payloadcms/payload",
-      "labels": ["bounty", "reward"]
-    },
-    {
-      "repo": "directus/directus",
-      "labels": ["bounty", "reward"]
-    },
-    {
-      "repo": "formbricks/formbricks",
-      "labels": ["bounty", "reward"]
-    },
-    {
-      "repo": "hoppscotch/hoppscotch",
-      "labels": ["bounty", "reward"]
-    },
-    {
-      "repo": "dubinc/dub",
-      "labels": ["bounty", "reward"]
-    }
+    { "repo": "appwrite/appwrite" },
+    { "repo": "n8n-io/n8n" },
+    { "repo": "medusajs/medusa" },
+    { "repo": "payloadcms/payload" },
+    { "repo": "directus/directus" },
+    { "repo": "formbricks/formbricks" },
+    { "repo": "hoppscotch/hoppscotch" },
+    { "repo": "dubinc/dub" }
   ]
 }

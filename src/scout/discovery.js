@@ -5,7 +5,17 @@ import {
   extractRewardSignals,
   linkedPrsFromTimeline,
 } from "./candidate-metadata.js";
+import {
+  classifyQueries,
+  normalizeQueryDescriptor,
+  resolveDiscoveryBudgets,
+  resolveMaxIssuesPerQuery,
+  searchPerPageForQuery,
+  selectDiscoveryItems,
+  shouldInterleaveDiscoveryQueries,
+} from "./discovery-query.js";
 import { createGitHubClient } from "./github-client.js";
+import { applyContributingPrefetch } from "./contributing-prefetch.js";
 import { gitHubRateLimitFromHeaders } from "./github-rate-limit.js";
 
 export { applyIssueMetadata, applyRepositoryMetadata, extractRewardSignals } from "./candidate-metadata.js";
@@ -85,26 +95,51 @@ export async function discoverCandidates({
       enrichMode,
       auditLog,
       policy,
+      searchPaceMs: profile?.search_pace_ms ?? null,
+      searchMaxRetries: profile?.search_max_retries ?? null,
     });
 
   const candidates = [];
-  for (const queryEntry of queries) {
-    if (candidates.length >= limit) break;
-    const queryDescriptor = normalizeQueryDescriptor(queryEntry);
-    const query = queryDescriptor.query;
-    try {
-      const searchResponse = await client.searchIssues(query, Math.min(50, limit));
-      recordRateLimitObservation(auditLog, policy, "github_search_read", searchResponse.rate_limit, query);
-      const body = searchResponse.body;
-      for (const item of body.items ?? []) {
-        candidates.push(fromGitHubSearchItem(item, query, queryDescriptor));
-        if (candidates.length >= limit) break;
-      }
-    } catch (error) {
-      const message = `GitHub search failed with status ${error.status ?? "unknown"}.`;
-      recordCollectionError(collectionErrors, "github_search_read", message, query, error.rate_limit ?? null);
-      recordFailure(policy, "github_search_read", auditLog, message);
-    }
+  const maxPerQuery = resolveMaxIssuesPerQuery(profile);
+  const interleave = shouldInterleaveDiscoveryQueries(profile);
+  const { seed, broad } = classifyQueries(queries);
+  const { seedLimit, partitioned } = resolveDiscoveryBudgets(profile, limit);
+
+  if (partitioned) {
+    await collectDiscoveryItems({
+      queryEntries: seed,
+      budget: seedLimit,
+      candidates,
+      client,
+      policy,
+      auditLog,
+      collectionErrors,
+      maxPerQuery,
+      interleave,
+    });
+    await collectDiscoveryItems({
+      queryEntries: broad,
+      budget: limit - candidates.length,
+      candidates,
+      client,
+      policy,
+      auditLog,
+      collectionErrors,
+      maxPerQuery,
+      interleave,
+    });
+  } else {
+    await collectDiscoveryItems({
+      queryEntries: queries,
+      budget: limit,
+      candidates,
+      client,
+      policy,
+      auditLog,
+      collectionErrors,
+      maxPerQuery,
+      interleave,
+    });
   }
 
   let deduped = applyProfileFilters(dedupeCandidates(candidates), profile).slice(0, limit);
@@ -115,14 +150,42 @@ export async function discoverCandidates({
   }
 
   const { fresh, reused } = splitKnownCandidates(deduped, knownCandidates);
+  const contributingCache = new Map();
+  const prefetchContributing = profile?.prefetch_contributing === true;
 
-  const enrichOne = (candidate) =>
-    enrichCandidateMetadata({
+  const enrichOne = async (candidate) => {
+    let enriched = await enrichCandidateMetadata({
       policy,
       candidate,
       auditLog,
       client,
     });
+    if (!prefetchContributing) {
+      return enriched;
+    }
+    const merged = await applyContributingPrefetch({
+      candidate: enriched,
+      rewardFields: {
+        reward_signals: enriched.reward_signals ?? [],
+        has_verified_reward_signal: enriched.has_verified_reward_signal ?? false,
+        has_observed_reward_metadata: enriched.has_observed_reward_metadata ?? false,
+        has_inferred_reward_signal: enriched.has_inferred_reward_signal ?? false,
+        estimated_reward_usd: enriched.estimated_reward_usd ?? null,
+        estimated_reward_amount: enriched.estimated_reward_amount ?? null,
+        reward_currency: enriched.reward_currency ?? null,
+        source_observations: [],
+      },
+      client,
+      cache: contributingCache,
+      policy,
+      auditLog,
+    });
+    return {
+      ...enriched,
+      ...merged,
+      source_observations: [...(enriched.source_observations ?? []), ...(merged.source_observations ?? [])],
+    };
+  };
 
   const enrichedFresh = await client.enrichCandidates(fresh, enrichOne);
   return [...enrichedFresh, ...reused];
@@ -165,14 +228,54 @@ export function candidateKey(candidate) {
   return `${candidate.repo_owner}/${candidate.repo_name}#${candidate.issue_number}`;
 }
 
-function normalizeQueryDescriptor(queryEntry) {
-  if (typeof queryEntry === "string") {
-    return { query: queryEntry };
+async function collectDiscoveryItems({
+  queryEntries,
+  budget,
+  candidates,
+  client,
+  policy,
+  auditLog,
+  collectionErrors,
+  maxPerQuery,
+  interleave,
+}) {
+  if (budget <= 0 || queryEntries.length === 0) {
+    return;
   }
-  if (!queryEntry || typeof queryEntry !== "object" || typeof queryEntry.query !== "string" || queryEntry.query.length === 0) {
-    throw new Error("Discovery queries must be strings or query descriptor objects with a query string.");
+
+  const queryPages = [];
+  for (const queryEntry of queryEntries) {
+    const queryDescriptor = normalizeQueryDescriptor(queryEntry);
+    const query = queryDescriptor.query;
+    try {
+      const searchResponse = await client.searchIssues(
+        query,
+        searchPerPageForQuery({ limit: budget, maxPerQuery }),
+      );
+      recordRateLimitObservation(auditLog, policy, "github_search_read", searchResponse.rate_limit, query);
+      queryPages.push({
+        descriptor: queryDescriptor,
+        query,
+        items: searchResponse.body?.items ?? [],
+      });
+    } catch (error) {
+      const message = `GitHub search failed with status ${error.status ?? "unknown"}.`;
+      recordCollectionError(collectionErrors, "github_search_read", message, query, error.rate_limit ?? null, {
+        error_kind: error.error_kind ?? "search_failed",
+        retry_count: error.retry_count ?? 0,
+      });
+      recordFailure(policy, "github_search_read", auditLog, message);
+    }
   }
-  return queryEntry;
+
+  const selected = selectDiscoveryItems(queryPages, {
+    limit: budget,
+    maxPerQuery,
+    interleave,
+  });
+  for (const { item, descriptor, query } of selected) {
+    candidates.push(fromGitHubSearchItem(item, query, descriptor));
+  }
 }
 
 function sourceObservationsFromQuery(queryDescriptor) {
@@ -309,13 +412,15 @@ function recordFailure(policy, operation, auditLog, reason, candidateId = null) 
   });
 }
 
-function recordCollectionError(collectionErrors, operation, message, query = null, rateLimit = null) {
+function recordCollectionError(collectionErrors, operation, message, query = null, rateLimit = null, details = {}) {
   collectionErrors.push({
     error_id: `collection-${Date.now()}-${Math.random().toString(16).slice(2)}`,
     operation,
     query,
     rate_limit: rateLimit,
     message,
+    error_kind: details.error_kind ?? null,
+    retry_count: details.retry_count ?? null,
     observed_at: new Date().toISOString(),
   });
 }

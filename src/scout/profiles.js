@@ -1,7 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { DISCOVERY_INTENTS } from "./types.js";
-import { normalizeSeedRepo } from "./seed-lists.js";
+import { normalizeSeedRepo, queriesForSeedRepo as seedListQueriesForSeedRepo } from "./seed-lists.js";
 import { validateSearchProfile } from "./validators.js";
 
 export const PROFILE_PRESETS = Object.freeze({
@@ -53,6 +53,47 @@ export const PROFILE_PRESETS = Object.freeze({
       "is:issue state:open label:reward no:assignee language:TypeScript",
     ],
   },
+  "rewarded-trusted-only": {
+    discovery_intent: "rewarded",
+    languages: [],
+    labels: [],
+    seed_reward_labels: ["bounty", "reward", "algora", "paid", "sponsor", "issuehunt", "💰"],
+    max_issues_per_query: 5,
+    interleave_discovery_queries: true,
+    reserve_broad_query_slots: 15,
+    prefetch_contributing: true,
+    trusted_seed_lists: ["rewarded-programs"],
+    include_queries: [],
+    require_verified_reward: true,
+    require_trusted_seed: true,
+    rank_shortlist_by_payout: true,
+    queries_prioritize_seeds: true,
+    shortlist_verdicts: ["GREEN", "YELLOW"],
+  },
+  "rewarded-hunt": {
+    discovery_intent: "rewarded",
+    languages: [],
+    labels: [],
+    seed_reward_labels: ["bounty", "reward", "algora", "paid", "sponsor", "issuehunt", "💰"],
+    max_issues_per_query: 5,
+    interleave_discovery_queries: true,
+    reserve_broad_query_slots: 15,
+    prefetch_contributing: true,
+    trusted_seed_lists: ["rewarded-programs", "rewarded-programs-algora"],
+    include_queries: [
+      "is:issue state:open label:algora no:assignee stars:>500",
+      "is:issue state:open label:bounty no:assignee stars:>1000",
+      "is:issue state:open label:issuehunt no:assignee stars:>500",
+      'is:issue state:open "algora.io" in:body no:assignee stars:>500',
+    ],
+    require_verified_reward: false,
+    require_trusted_seed: false,
+    rank_shortlist_by_payout: true,
+    queries_prioritize_seeds: true,
+    broad_green_min_usd: 25,
+    require_trusted_or_platform_for_broad_green: true,
+    shortlist_verdicts: ["GREEN", "YELLOW"],
+  },
 });
 
 export function isProfilePreset(name) {
@@ -80,8 +121,20 @@ export function createSearchProfile({
   threshold_overrides = {},
   discovery_intent,
   require_verified_reward,
+  require_trusted_seed,
+  rank_shortlist_by_payout,
+  queries_prioritize_seeds,
+  seed_reward_labels,
+  max_issues_per_query,
+  interleave_discovery_queries,
+  reserve_broad_query_slots,
+  broad_green_min_usd,
+  require_trusted_or_platform_for_broad_green,
   shortlist_verdicts,
   repo_size_filter,
+  prefetch_contributing,
+  search_pace_ms,
+  search_max_retries,
 }) {
   const preset = presetDefaults(name);
   const now = new Date().toISOString();
@@ -103,8 +156,21 @@ export function createSearchProfile({
     mode,
     threshold_overrides,
     require_verified_reward: require_verified_reward ?? preset.require_verified_reward ?? false,
+    require_trusted_seed: require_trusted_seed ?? preset.require_trusted_seed ?? false,
+    rank_shortlist_by_payout: rank_shortlist_by_payout ?? preset.rank_shortlist_by_payout ?? false,
+    queries_prioritize_seeds: queries_prioritize_seeds ?? preset.queries_prioritize_seeds ?? false,
+    seed_reward_labels: seed_reward_labels ?? preset.seed_reward_labels ?? [],
+    max_issues_per_query: max_issues_per_query ?? preset.max_issues_per_query ?? null,
+    interleave_discovery_queries: interleave_discovery_queries ?? preset.interleave_discovery_queries ?? false,
+    reserve_broad_query_slots: reserve_broad_query_slots ?? preset.reserve_broad_query_slots ?? null,
+    broad_green_min_usd: broad_green_min_usd ?? preset.broad_green_min_usd ?? null,
+    require_trusted_or_platform_for_broad_green:
+      require_trusted_or_platform_for_broad_green ?? preset.require_trusted_or_platform_for_broad_green ?? false,
     shortlist_verdicts: shortlist_verdicts ?? preset.shortlist_verdicts ?? ["GREEN", "YELLOW", "GRAY"],
     repo_size_filter: sizeFilter ?? null,
+    prefetch_contributing: prefetch_contributing ?? preset.prefetch_contributing ?? false,
+    search_pace_ms: search_pace_ms ?? preset.search_pace_ms ?? null,
+    search_max_retries: search_max_retries ?? preset.search_max_retries ?? null,
     created_at: now,
     updated_at: now,
   });
@@ -112,19 +178,24 @@ export function createSearchProfile({
 
 export function queriesFromProfile(profile, options = {}) {
   validateSearchProfile(profile);
-  const queries = [];
+  const generated = [];
   for (const label of profile.labels) {
     for (const language of profile.languages) {
       if (language === "Docs") {
-        queries.push(appendRepoSizeFilter(`is:issue state:open label:"${label}" no:assignee`, profile));
+        generated.push(appendRepoSizeFilter(`is:issue state:open label:"${label}" no:assignee`, profile));
       } else {
-        queries.push(
+        generated.push(
           appendRepoSizeFilter(`is:issue state:open label:"${label}" no:assignee language:${language}`, profile),
         );
       }
     }
   }
-  return dedupeQueries([...profile.include_queries, ...seedQueriesFromProfile(profile, options.trustedSeedLists ?? []), ...queries]);
+  const includeQueries = profile.include_queries ?? [];
+  const seedQueries = seedQueriesFromProfile(profile, options.trustedSeedLists ?? []);
+  if (profile.queries_prioritize_seeds) {
+    return dedupeQueries([...seedQueries, ...includeQueries, ...generated]);
+  }
+  return dedupeQueries([...includeQueries, ...seedQueries, ...generated]);
 }
 
 export function appendRepoSizeFilter(query, profile) {
@@ -157,29 +228,38 @@ function seedQueriesFromProfile(profile, trustedSeedLists) {
 }
 
 function queriesForSeedRepo(seedRepo, profile) {
-  const labels = seedRepo.labels ?? profile.labels;
+  const overrideQueries = seedListQueriesForSeedRepo(seedRepo);
+  if (overrideQueries) {
+    return overrideQueries.map((query) => appendRepoSizeFilter(query, profile));
+  }
+
+  let labels = seedRepo.labels ?? profile.labels;
+  if (labels.length === 0 && (profile.seed_reward_labels ?? []).length > 0) {
+    labels = profile.seed_reward_labels;
+  }
   const languages = seedRepo.languages ?? profile.languages;
   if (labels.length === 0) {
     return [appendRepoSizeFilter(`repo:${seedRepo.repo} is:issue state:open no:assignee`, profile)];
   }
 
+  const labelClause = buildLabelOrClause(labels);
+  const repoBase = `repo:${seedRepo.repo} is:issue state:open ${labelClause} no:assignee`;
+
+  if (languages.length === 0) {
+    return [appendRepoSizeFilter(repoBase, profile)];
+  }
+
   const queries = [];
-  for (const label of labels) {
-    if (languages.length === 0) {
-      queries.push(
-        appendRepoSizeFilter(
-          `repo:${seedRepo.repo} is:issue state:open label:"${escapeQueryValue(label)}" no:assignee`,
-          profile,
-        ),
-      );
-      continue;
-    }
-    for (const language of languages) {
-      const base = `repo:${seedRepo.repo} is:issue state:open label:"${escapeQueryValue(label)}" no:assignee`;
-      queries.push(appendRepoSizeFilter(language === "Docs" ? base : `${base} language:${language}`, profile));
-    }
+  for (const language of languages) {
+    const query = language === "Docs" ? repoBase : `${repoBase} language:${language}`;
+    queries.push(appendRepoSizeFilter(query, profile));
   }
   return queries;
+}
+
+function buildLabelOrClause(labels) {
+  const parts = labels.map((label) => `label:"${escapeQueryValue(label)}"`);
+  return parts.length === 1 ? parts[0] : `(${parts.join(" OR ")})`;
 }
 
 function dedupeQueries(queries) {

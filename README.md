@@ -58,6 +58,8 @@ Session manifest (`scout_session.json`) records `workflow_preset_requested`, `wo
 | `beginner-small-repos` | beginner | explicit `stars:<500` filter |
 | `rewarded-typescript` | rewarded | bounty/reward queries |
 | `rewarded-verified-only` | rewarded | verified reward signals only |
+| `rewarded-trusted-only` | rewarded | trusted seed programs only, spam penalties, payout-ranked shortlist |
+| `rewarded-hunt` | rewarded | dual seed lists + bounded Algora/bounty queries, inferred rewards OK, payout-ranked |
 
 When a profile sets `repo_size_filter` (e.g. `stars:<500`), Scout applies it to trusted seed-list queries and broad label/language queries. Large repos still listed in a seed file may contribute **zero** candidates if they exceed the filter.
 

@@ -1,4 +1,10 @@
+import { isBroadDiscoveryCandidate } from "./discovery-query.js";
 import { resolveDiscoveryIntent } from "./profiles.js";
+import {
+  bountySpamHardDropReason,
+  bountySpamPenalty,
+  isFromTrustedSeedList,
+} from "./bounty-spam.js";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
@@ -112,6 +118,10 @@ export function scoreCandidate(candidate, options = {}) {
   }
 
   if (discoveryIntent === "rewarded") {
+    if (isFromTrustedSeedList(candidate)) {
+      score += 20;
+      reasons.push("+20 trusted reward program seed list");
+    }
     if (candidate.has_verified_reward_signal) {
       score += 30;
       reasons.push("+30 verified reward signal");
@@ -126,6 +136,11 @@ export function scoreCandidate(candidate, options = {}) {
     if (candidate.has_acceptance_criteria) {
       score += 10;
       reasons.push("+10 acceptance criteria");
+    }
+    const spam = bountySpamPenalty(candidate);
+    if (spam.penalty > 0) {
+      score -= spam.penalty;
+      reasons.push(...spam.reasons);
     }
   }
 
@@ -228,10 +243,11 @@ export function triageCandidate(candidate, options = {}) {
     profile_id: options.profile_id,
     threshold_overrides: options.threshold_overrides ?? {},
     discovery_intent: options.discovery_intent,
+    require_trusted_seed: options.require_trusted_seed,
   };
   const triageConfig = resolveTriageConfig(profile);
   const triagePolicy = resolveTriagePolicy(triageConfig.discovery_intent);
-  const hardDrop = hardDropReason(candidate);
+  const hardDrop = hardDropReason(candidate, { profile });
   const score = scoreCandidate(candidate, { ...options, profile, discovery_intent: triageConfig.discovery_intent });
   const portfolio = portfolioValueScore(candidate, { ...options, profile, discovery_intent: triageConfig.discovery_intent });
   const incomeSummary = triageConfig.discovery_intent === "rewarded" ? buildIncomeSummary(candidate) : null;
@@ -288,10 +304,21 @@ export function triageCandidate(candidate, options = {}) {
     riskSummary = "Only inferred reward signal; verified bounty label or title payout is required for GREEN.";
     humanNextAction = "Confirm payout terms manually before pursuing; inferred body keywords are not sufficient.";
   } else if (triageConfig.discovery_intent === "rewarded") {
-    verdict = stale || score.score < greenMinScore ? "YELLOW" : "GREEN";
-    gapCodes = [];
-    riskSummary = incomeSummary ?? "Verified reward signal detected; payout not verified by Scout.";
-    humanNextAction = verdict === "GREEN" ? "Review reward terms manually before pursuing payout." : "Gather more reward clarity before pursuing.";
+    const broadGreenGate = evaluateBroadGreenGate(candidate, profile);
+    if (!broadGreenGate.passes) {
+      verdict = "YELLOW";
+      gapCodes = ["REWARD_GAP"];
+      riskSummary = broadGreenGate.risk_summary;
+      humanNextAction = broadGreenGate.human_next_action;
+    } else {
+      verdict = stale || score.score < greenMinScore ? "YELLOW" : "GREEN";
+      gapCodes = [];
+      riskSummary = incomeSummary ?? "Verified reward signal detected; payout not verified by Scout.";
+      humanNextAction =
+        verdict === "GREEN"
+          ? "Review reward terms manually before pursuing payout."
+          : "Gather more reward clarity before pursuing.";
+    }
   } else {
     verdict = stale || !setupDocumented || score.score < greenMinScore ? "YELLOW" : "GREEN";
     gapCodes = setupDocumented ? [] : ["SOURCE_GAP"];
@@ -328,7 +355,57 @@ function hasPositiveSetupDocs(candidate) {
   });
 }
 
-export function hardDropReason(candidate) {
+const DEFAULT_BROAD_GREEN_MIN_USD = 25;
+
+function hasPlatformUrlRewardSignal(candidate) {
+  return (candidate?.reward_signals ?? []).some((signal) => signal.kind === "platform_url");
+}
+
+function hasTitleVerifiedRewardSignal(candidate) {
+  return (candidate?.reward_signals ?? []).some(
+    (signal) =>
+      signal.confidence === "OBSERVED" &&
+      signal.source_ref === "issue_title" &&
+      (signal.kind === "amount" || signal.kind === "keyword"),
+  );
+}
+
+export function evaluateBroadGreenGate(candidate, profile = {}) {
+  if (profile.require_trusted_or_platform_for_broad_green !== true) {
+    return { passes: true, risk_summary: null, human_next_action: null };
+  }
+  if (isFromTrustedSeedList(candidate) || !isBroadDiscoveryCandidate(candidate)) {
+    return { passes: true, risk_summary: null, human_next_action: null };
+  }
+
+  const minUsd = profile.broad_green_min_usd ?? DEFAULT_BROAD_GREEN_MIN_USD;
+  const hasPlatformUrl = hasPlatformUrlRewardSignal(candidate);
+  const hasMinUsd =
+    typeof candidate.estimated_reward_usd === "number" &&
+    Number.isFinite(candidate.estimated_reward_usd) &&
+    candidate.estimated_reward_usd >= minUsd;
+  const hasTitleVerified = hasTitleVerifiedRewardSignal(candidate);
+
+  if (hasPlatformUrl || hasMinUsd || hasTitleVerified) {
+    return { passes: true, risk_summary: null, human_next_action: null };
+  }
+
+  return {
+    passes: false,
+    risk_summary:
+      "Broad-query reward candidate: label-only bounty on an unknown repo does not meet GREEN quality gate (requires platform URL, verified title payout, or minimum USD amount).",
+    human_next_action:
+      "Confirm payout platform and amount manually; GitHub bounty labels alone are insufficient for broad-discovered repos.",
+  };
+}
+
+export function hardDropReason(candidate, options = {}) {
+  const profile = options.profile ?? {};
+  if (profile.require_trusted_seed && !isFromTrustedSeedList(candidate)) {
+    return "Outside trusted reward program seed list.";
+  }
+  const spamDrop = bountySpamHardDropReason(candidate);
+  if (spamDrop) return spamDrop;
   if (candidate.archived) return "Repository is archived.";
   if (candidate.issue_state === "closed") return "Issue is closed.";
   if (candidate.assignees?.length > 0) return "Issue already has an assignee.";
@@ -340,11 +417,24 @@ export function hardDropReason(candidate) {
 }
 
 export function triageCandidates(candidates, options = {}) {
+  const profile = options.profile ?? {};
+  const rankByPayout = profile.rank_shortlist_by_payout === true;
+  const candidateById = new Map(candidates.map((candidate) => [candidate.candidate_id, candidate]));
+
   return candidates
     .map((candidate) => triageCandidate(candidate, options))
-    .sort((a, b) => {
-      const verdictOrder = { GREEN: 0, YELLOW: 1, GRAY: 2, RED: 3 };
-      return verdictOrder[a.verdict] - verdictOrder[b.verdict] || (b.score ?? 0) - (a.score ?? 0);
-    })
+    .sort((a, b) => compareTriageDecisions(a, b, { rankByPayout, candidateById }))
     .map((decision, index) => ({ ...decision, rank: decision.verdict === "RED" ? null : index + 1 }));
+}
+
+function compareTriageDecisions(a, b, { rankByPayout, candidateById }) {
+  const verdictOrder = { GREEN: 0, YELLOW: 1, GRAY: 2, RED: 3 };
+  const verdictCompare = verdictOrder[a.verdict] - verdictOrder[b.verdict];
+  if (verdictCompare !== 0) return verdictCompare;
+  if (rankByPayout) {
+    const payoutA = candidateById.get(a.candidate_id)?.estimated_reward_usd ?? 0;
+    const payoutB = candidateById.get(b.candidate_id)?.estimated_reward_usd ?? 0;
+    if (payoutB !== payoutA) return payoutB - payoutA;
+  }
+  return (b.score ?? 0) - (a.score ?? 0);
 }

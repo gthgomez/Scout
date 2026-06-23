@@ -13,7 +13,7 @@ Current release: **0.4.1** on `main`.
 | Intent | Mission | Presets |
 | --- | --- | --- |
 | `beginner` | Learning-focused contributions | `beginner-python-ts`, `beginner-docs-only`, `beginner-small-repos` |
-| `rewarded` | Bounty/reward metadata hunts | `rewarded-typescript`, `rewarded-verified-only` |
+| `rewarded` | Bounty/reward metadata hunts | `rewarded-typescript`, `rewarded-verified-only`, `rewarded-trusted-only`, `rewarded-hunt` |
 
 ## Environment
 
@@ -25,6 +25,10 @@ Current release: **0.4.1** on `main`.
 | `SCOUT_ENRICH_MODE` | `auto`, `rest`, or `graphql` |
 | `SCOUT_CACHE_TTL_SEARCH` | Search cache TTL seconds (default 86400) |
 | `SCOUT_CACHE_TTL_METADATA` | Metadata cache TTL seconds (default 21600) |
+| `SCOUT_SEARCH_PACE_MS` | Minimum delay between GitHub search API calls (default 2500) |
+| `SCOUT_SEARCH_MAX_RETRIES` | Retries per search query on secondary rate limit (default 3) |
+| Profile `prefetch_contributing` | Fetch CONTRIBUTING.md per repo during rewarded discovery (on `rewarded-hunt`) |
+| Profile `search_pace_ms` / `search_max_retries` | Override env search pacing for a profile run |
 | `SCOUT_WEBHOOK_URL` | Optional user-owned webhook for monitor wrapper (not read by Scout CLI) |
 
 ## Workflow Presets
