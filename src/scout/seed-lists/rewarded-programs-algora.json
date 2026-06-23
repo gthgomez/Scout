@@ -8,7 +8,7 @@
     { "repo": "makeplane/plane" },
     {
       "repo": "formancehq/formance",
-      "search_query": "repo:formancehq/formance is:issue state:open (label:\"bounty\" OR label:\"algora\" OR label:\"reward\") no:assignee"
+      "search_query": "repo:formancehq/formance is:issue state:open label:bounty no:assignee"
     },
     { "repo": "zio/zio" },
     { "repo": "golemcloud/golem" }

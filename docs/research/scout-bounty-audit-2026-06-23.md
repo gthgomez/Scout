@@ -206,7 +206,9 @@ See [`bounty-claim-runbook.md`](../../src/scout/runbooks/bounty-claim-runbook.md
 
 ### Notes
 
-P0 pacing/backoff appears to have eliminated the prior 403 cascade (9 backoff events, 0×403). Remaining gaps: broad `include_queries` still did not contribute candidates (`broad_queries_executed: 0`), and `run_status` stayed `partial` due to the single failed search plus incomplete broad coverage.
+P0 pacing/backoff appears to have eliminated the prior 403 cascade (9 backoff events, 0×403). Remaining gaps after Wave 2: broad `include_queries` still did not contribute candidates (`broad_queries_executed: 0`), and `run_status` stayed `partial` due to the single failed search plus incomplete broad coverage.
+
+**Wave 2 follow-up fixes (same branch):** (1) Shortened `formancehq/formance` seed query to `label:bounty` only — the six-label OR clause triggered GitHub **422** validation, not rate limiting. (2) Partitioned discovery now **interleaves seed and broad search API calls** (broad starts after the first seed, not after all ~16 seeds) and always executes at least three broad `include_queries` when `reserve_broad_query_slots` is set; broad candidate selection still respects the reserved slot budget. (3) Scout reports now retain `profile.include_queries` so benchmark `broad_queries_executed` reflects actual broad-query hits instead of always reading zero.
 
 
 ## Related documents

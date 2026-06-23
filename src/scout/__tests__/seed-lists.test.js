@@ -112,7 +112,7 @@ describe("trusted seed lists", () => {
     assert.ok(formance);
     assert.equal(
       formance.search_query,
-      'repo:formancehq/formance is:issue state:open (label:"bounty" OR label:"algora" OR label:"reward") no:assignee',
+      "repo:formancehq/formance is:issue state:open label:bounty no:assignee",
     );
   });
 

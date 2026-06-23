@@ -6,10 +6,12 @@ import {
   linkedPrsFromTimeline,
 } from "./candidate-metadata.js";
 import {
+  buildInterleavedSearchOrder,
   classifyQueries,
   normalizeQueryDescriptor,
   resolveDiscoveryBudgets,
   resolveMaxIssuesPerQuery,
+  resolveMinBroadQuerySearches,
   searchPerPageForQuery,
   selectDiscoveryItems,
   shouldInterleaveDiscoveryQueries,
@@ -106,12 +108,15 @@ export async function discoverCandidates({
   const maxPerQuery = resolveMaxIssuesPerQuery(profile);
   const interleave = shouldInterleaveDiscoveryQueries(profile);
   const { seed, broad } = classifyQueries(queries);
-  const { seedLimit, partitioned } = resolveDiscoveryBudgets(profile, limit);
+  const { seedLimit, broadLimit, partitioned } = resolveDiscoveryBudgets(profile, limit);
 
   if (partitioned) {
-    await collectDiscoveryItems({
-      queryEntries: seed,
-      budget: seedLimit,
+    await collectPartitionedDiscoveryItems({
+      seed,
+      broad,
+      seedLimit,
+      broadLimit,
+      limit,
       candidates,
       client,
       policy,
@@ -119,17 +124,7 @@ export async function discoverCandidates({
       collectionErrors,
       maxPerQuery,
       interleave,
-    });
-    await collectDiscoveryItems({
-      queryEntries: broad,
-      budget: limit - candidates.length,
-      candidates,
-      client,
-      policy,
-      auditLog,
-      collectionErrors,
-      maxPerQuery,
-      interleave,
+      profile,
     });
   } else {
     await collectDiscoveryItems({
@@ -238,6 +233,128 @@ export function candidateKey(candidate) {
   return `${candidate.repo_owner}/${candidate.repo_name}#${candidate.issue_number}`;
 }
 
+async function collectPartitionedDiscoveryItems({
+  seed,
+  broad,
+  seedLimit,
+  broadLimit,
+  limit,
+  candidates,
+  client,
+  policy,
+  auditLog,
+  collectionErrors,
+  maxPerQuery,
+  interleave,
+  profile,
+}) {
+  const minBroadSearches = resolveMinBroadQuerySearches(profile, broad.length);
+  const searchOrder = buildInterleavedSearchOrder(seed, broad);
+  const seedPages = [];
+  const broadPages = [];
+  const searchedBroad = new Set();
+
+  for (const { entry, group } of searchOrder) {
+    const page = await searchDiscoveryQueryPage({
+      queryEntry: entry,
+      budget: limit,
+      client,
+      policy,
+      auditLog,
+      collectionErrors,
+      maxPerQuery,
+    });
+    if (!page) {
+      continue;
+    }
+    if (group === "seed") {
+      seedPages.push(page);
+    } else {
+      broadPages.push(page);
+      searchedBroad.add(page.query);
+    }
+  }
+
+  if (minBroadSearches > searchedBroad.size) {
+    for (const queryEntry of broad) {
+      const queryDescriptor = normalizeQueryDescriptor(queryEntry);
+      if (searchedBroad.has(queryDescriptor.query)) {
+        continue;
+      }
+      const page = await searchDiscoveryQueryPage({
+        queryEntry,
+        budget: limit,
+        client,
+        policy,
+        auditLog,
+        collectionErrors,
+        maxPerQuery,
+      });
+      if (page) {
+        broadPages.push(page);
+        searchedBroad.add(page.query);
+      }
+      if (searchedBroad.size >= minBroadSearches) {
+        break;
+      }
+    }
+  }
+
+  const seedSelected = selectDiscoveryItems(seedPages, {
+    limit: seedLimit,
+    maxPerQuery,
+    interleave,
+  });
+  for (const { item, descriptor, query } of seedSelected) {
+    candidates.push(fromGitHubSearchItem(item, query, descriptor));
+  }
+
+  const broadBudget = Math.min(broadLimit, Math.max(0, limit - candidates.length));
+  if (broadBudget > 0 && broadPages.length > 0) {
+    const broadSelected = selectDiscoveryItems(broadPages, {
+      limit: broadBudget,
+      maxPerQuery,
+      interleave,
+    });
+    for (const { item, descriptor, query } of broadSelected) {
+      candidates.push(fromGitHubSearchItem(item, query, descriptor));
+    }
+  }
+}
+
+async function searchDiscoveryQueryPage({
+  queryEntry,
+  budget,
+  client,
+  policy,
+  auditLog,
+  collectionErrors,
+  maxPerQuery,
+}) {
+  const queryDescriptor = normalizeQueryDescriptor(queryEntry);
+  const query = queryDescriptor.query;
+  try {
+    const searchResponse = await client.searchIssues(
+      query,
+      searchPerPageForQuery({ limit: budget, maxPerQuery }),
+    );
+    recordRateLimitObservation(auditLog, policy, "github_search_read", searchResponse.rate_limit, query);
+    return {
+      descriptor: queryDescriptor,
+      query,
+      items: searchResponse.body?.items ?? [],
+    };
+  } catch (error) {
+    const message = `GitHub search failed with status ${error.status ?? "unknown"}.`;
+    recordCollectionError(collectionErrors, "github_search_read", message, query, error.rate_limit ?? null, {
+      error_kind: error.error_kind ?? "search_failed",
+      retry_count: error.retry_count ?? 0,
+    });
+    recordFailure(policy, "github_search_read", auditLog, message);
+    return null;
+  }
+}
+
 async function collectDiscoveryItems({
   queryEntries,
   budget,
@@ -255,26 +372,17 @@ async function collectDiscoveryItems({
 
   const queryPages = [];
   for (const queryEntry of queryEntries) {
-    const queryDescriptor = normalizeQueryDescriptor(queryEntry);
-    const query = queryDescriptor.query;
-    try {
-      const searchResponse = await client.searchIssues(
-        query,
-        searchPerPageForQuery({ limit: budget, maxPerQuery }),
-      );
-      recordRateLimitObservation(auditLog, policy, "github_search_read", searchResponse.rate_limit, query);
-      queryPages.push({
-        descriptor: queryDescriptor,
-        query,
-        items: searchResponse.body?.items ?? [],
-      });
-    } catch (error) {
-      const message = `GitHub search failed with status ${error.status ?? "unknown"}.`;
-      recordCollectionError(collectionErrors, "github_search_read", message, query, error.rate_limit ?? null, {
-        error_kind: error.error_kind ?? "search_failed",
-        retry_count: error.retry_count ?? 0,
-      });
-      recordFailure(policy, "github_search_read", auditLog, message);
+    const page = await searchDiscoveryQueryPage({
+      queryEntry,
+      budget,
+      client,
+      policy,
+      auditLog,
+      collectionErrors,
+      maxPerQuery,
+    });
+    if (page) {
+      queryPages.push(page);
     }
   }
 

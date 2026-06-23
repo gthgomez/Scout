@@ -503,6 +503,99 @@ describe("discovery query budgeting", () => {
     assert.equal(candidates.filter((candidate) => candidate.discovered_by_query === seedQuery.query).length, 7);
     assert.ok(searchCalls.includes(broadQuery));
   });
+
+  it("interleaves seed and broad API calls when reserve_broad_query_slots is set", async () => {
+    const seedQueries = Array.from({ length: 6 }, (_, index) => ({
+      query: `repo:seed/repo-${index} is:issue state:open no:assignee`,
+      kind: "trusted_seed_list",
+      seed_list_id: "rewarded-programs",
+      repo: `seed/repo-${index}`,
+    }));
+    const broadQueries = [
+      "is:issue state:open label:algora no:assignee",
+      "is:issue state:open label:bounty no:assignee",
+      "is:issue state:open label:issuehunt no:assignee",
+      "is:issue state:open label:reward no:assignee",
+    ];
+    const searchCalls = [];
+    const githubClient = {
+      searchIssues: async (query) => {
+        searchCalls.push(query);
+        return { body: { items: [] }, rate_limit: null };
+      },
+      enrichCandidates: async (items) => items,
+    };
+
+    await discoverCandidates({
+      policy: defaultPolicy("metadata_only"),
+      queries: [...seedQueries, ...broadQueries],
+      limit: 10,
+      enrich: false,
+      profile: {
+        reserve_broad_query_slots: 3,
+      },
+      githubClient,
+    });
+
+    const firstBroadIndex = searchCalls.findIndex((query) => broadQueries.includes(query));
+    assert.ok(firstBroadIndex >= 0);
+    assert.ok(firstBroadIndex < seedQueries.length, "broad search should start before all seed searches finish");
+    assert.equal(
+      searchCalls.filter((query) => broadQueries.includes(query)).length,
+      broadQueries.length,
+    );
+  });
+
+  it("searches at least three broad queries when seeds return no candidates", async () => {
+    const seedQueries = Array.from({ length: 4 }, (_, index) => ({
+      query: `repo:seed/repo-${index} is:issue state:open no:assignee`,
+      kind: "trusted_seed_list",
+      seed_list_id: "rewarded-programs",
+      repo: `seed/repo-${index}`,
+    }));
+    const broadQueries = [
+      "is:issue state:open label:algora no:assignee",
+      "is:issue state:open label:bounty no:assignee",
+      "is:issue state:open label:issuehunt no:assignee",
+      "is:issue state:open label:reward no:assignee",
+    ];
+    const searchCalls = [];
+    const githubClient = {
+      searchIssues: async (query) => {
+        searchCalls.push(query);
+        const broadIndex = broadQueries.indexOf(query);
+        const isBroad = broadIndex >= 0;
+        const count = isBroad ? 2 : 0;
+        const repo = isBroad ? `broad/repo-${broadIndex}` : "seed/empty";
+        return {
+          body: {
+            items: Array.from({ length: count }, (_, index) => searchItem(repo, index + 1, query)),
+          },
+          rate_limit: null,
+        };
+      },
+      enrichCandidates: async (items) => items,
+    };
+
+    const candidates = await discoverCandidates({
+      policy: defaultPolicy("metadata_only"),
+      queries: [...seedQueries, ...broadQueries],
+      limit: 10,
+      enrich: false,
+      profile: {
+        reserve_broad_query_slots: 5,
+        max_issues_per_query: 5,
+        interleave_discovery_queries: true,
+      },
+      githubClient,
+    });
+
+    assert.equal(searchCalls.filter((query) => broadQueries.includes(query)).length, broadQueries.length);
+    assert.ok(candidates.length >= 3);
+    assert.ok(
+      broadQueries.filter((query) => candidates.some((candidate) => candidate.discovered_by_query === query)).length >= 3,
+    );
+  });
 });
 
 function searchItem(repo, number, discoveredByQuery, title = `Issue ${number}`) {

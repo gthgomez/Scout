@@ -76,6 +76,32 @@ export function resolveDiscoveryBudgets(profile, limit) {
   return { seedLimit: limit, broadLimit: limit, partitioned: false };
 }
 
+export function resolveMinBroadQuerySearches(profile, broadQueryCount) {
+  const reserve = profile?.reserve_broad_query_slots;
+  if (typeof reserve !== "number" || reserve <= 0 || broadQueryCount <= 0) {
+    return 0;
+  }
+  return Math.min(3, broadQueryCount);
+}
+
+/**
+ * Round-robin seed and broad query descriptors so broad searches start early
+ * instead of waiting for every seed repo search to finish.
+ */
+export function buildInterleavedSearchOrder(seedEntries = [], broadEntries = []) {
+  const order = [];
+  const maxLen = Math.max(seedEntries.length, broadEntries.length);
+  for (let index = 0; index < maxLen; index += 1) {
+    if (index < seedEntries.length) {
+      order.push({ entry: seedEntries[index], group: "seed" });
+    }
+    if (index < broadEntries.length) {
+      order.push({ entry: broadEntries[index], group: "broad" });
+    }
+  }
+  return order;
+}
+
 function capItems(items, maxPerQuery) {
   if (maxPerQuery == null) {
     return items;

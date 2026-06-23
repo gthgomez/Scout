@@ -40,6 +40,7 @@ export function createReportModel({
     sandbox_runs,
     probe_config,
     probe_status,
+    ...(profile !== undefined ? { profile } : {}),
   });
 }
 
