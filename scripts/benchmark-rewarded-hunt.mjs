@@ -8,6 +8,19 @@ import { spawn } from "node:child_process";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
+function parseLaneArg() {
+  const idx = process.argv.indexOf("--lane");
+  if (idx === -1) {
+    return "nocache";
+  }
+  const value = process.argv[idx + 1];
+  if (!["nocache", "cached", "both"].includes(value)) {
+    console.error("--lane must be nocache, cached, or both");
+    process.exit(1);
+  }
+  return value;
+}
+
 async function loadEnv() {
   try {
     const raw = await readFile(join(root, ".env"), "utf8");
@@ -126,13 +139,18 @@ async function runLane(name, cacheFlag) {
 await loadEnv();
 await mkdir(join(root, ".scout"), { recursive: true });
 
+const laneMode = parseLaneArg();
 const { queryCount, broadQueryCount } = await countQueries();
 const hasToken = Boolean(process.env.GITHUB_TOKEN || process.env.GH_TOKEN);
 
 const lanes = [];
 if (hasToken) {
-  lanes.push(await runLane("nocache", false));
-  lanes.push(await runLane("cached", true));
+  if (laneMode === "nocache" || laneMode === "both") {
+    lanes.push(await runLane("nocache", false));
+  }
+  if (laneMode === "cached" || laneMode === "both") {
+    lanes.push(await runLane("cached", true));
+  }
 } else {
   lanes.push({ name: "skipped", cache: null, cli_exit_code: 0, elapsed_ms: 0, report: null, skip_reason: "no GITHUB_TOKEN" });
 }
@@ -140,6 +158,7 @@ if (hasToken) {
 const benchmark = {
   generated_at: new Date().toISOString(),
   profile: "rewarded-hunt",
+  lane_mode: laneMode,
   query_count: queryCount,
   has_github_token: hasToken,
   targets: {

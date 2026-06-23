@@ -97,6 +97,7 @@ export async function discoverCandidates({
       policy,
       searchPaceMs: profile?.search_pace_ms ?? null,
       searchMaxRetries: profile?.search_max_retries ?? null,
+      searchSecondaryCooldownMs: profile?.search_secondary_cooldown_ms ?? null,
     });
 
   const candidates = [];

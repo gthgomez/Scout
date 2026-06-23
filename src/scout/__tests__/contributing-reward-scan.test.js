@@ -42,6 +42,24 @@ describe("contributing reward scan", () => {
     assert.equal(rewardSignal.platform, "algora");
   });
 
+  it("emits reward_signal for IssueHunt and Opire platform URLs", () => {
+    const text = [
+      "Bounties: https://issuehunt.io/r/issues/acme-repo-1",
+      "Also https://opire.dev/issues/acme/repo/2",
+    ].join("\n");
+
+    const observations = scanContributingRewardProgram(text, "CONTRIBUTING.md");
+    const issuehunt = observations.find((item) => item.platform === "issuehunt");
+    const opire = observations.find((item) => item.platform === "opire");
+
+    assert.ok(issuehunt);
+    assert.equal(issuehunt.kind, "reward_signal");
+    assert.equal(issuehunt.confidence, "OBSERVED");
+    assert.ok(opire);
+    assert.equal(opire.kind, "reward_signal");
+    assert.equal(opire.confidence, "OBSERVED");
+  });
+
   it("returns no observations for neutral contributing guides", () => {
     const text = [
       "# Contributing",

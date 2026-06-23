@@ -19,6 +19,7 @@ describe("rewarded-hunt preset", () => {
       interleave_discovery_queries: true,
       reserve_broad_query_slots: 15,
       prefetch_contributing: true,
+      search_pace_ms: 5000,
       trusted_seed_lists: ["rewarded-programs", "rewarded-programs-algora"],
       include_queries: [
         "is:issue state:open label:algora no:assignee stars:>500",

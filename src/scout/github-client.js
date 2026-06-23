@@ -4,11 +4,12 @@ import { enrichCandidatesGraphql } from "./github-graphql.js";
 import {
   classifySearchError,
   computeSearchRetryDelayMs,
-  createSearchPacer,
+  createSearchSessionGuard,
   isRetryableSearchError,
   parseRetryAfterSeconds,
   resolveSearchMaxRetries,
   resolveSearchPaceMs,
+  resolveSearchSecondaryCooldownMs,
 } from "./github-search-policy.js";
 import { gitHubHeaders, gitHubRateLimitFromHeaders } from "./github-rate-limit.js";
 
@@ -37,6 +38,7 @@ export function createGitHubClient({
   policy = null,
   searchPaceMs = null,
   searchMaxRetries = null,
+  searchSecondaryCooldownMs = null,
 } = {}) {
   if (typeof fetchImpl !== "function") {
     throw new Error("A fetch implementation is required for GitHub client");
@@ -44,7 +46,10 @@ export function createGitHubClient({
 
   const cache = createGitHubCache({ cacheDir, enabled: cacheEnabled });
   let lastRateLimit = null;
-  const paceSearch = createSearchPacer(resolveSearchPaceMs(searchPaceMs));
+  const { paceSearch, onSecondaryLimitHit } = createSearchSessionGuard({
+    paceMs: resolveSearchPaceMs(searchPaceMs),
+    secondaryCooldownMs: resolveSearchSecondaryCooldownMs(searchSecondaryCooldownMs),
+  });
 
   async function maybeBackoff(rateLimit) {
     if (!rateLimit || rateLimit.remaining === null || rateLimit.remaining >= 10) {
@@ -183,6 +188,9 @@ export function createGitHubClient({
       } catch (error) {
         error.retry_count = attempt;
         error.error_kind = classifySearchError(error);
+        if (error.error_kind === "secondary_rate_limit") {
+          onSecondaryLimitHit();
+        }
         lastError = error;
         if (attempt >= maxRetries || !isRetryableSearchError(error)) {
           throw error;

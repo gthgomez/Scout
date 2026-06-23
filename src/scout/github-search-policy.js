@@ -1,7 +1,9 @@
 import { sleep } from "./async-pool.js";
 
-const DEFAULT_SEARCH_PACE_MS = 2500;
+const DEFAULT_SEARCH_PACE_MS = 4000;
 const DEFAULT_SEARCH_MAX_RETRIES = 3;
+const DEFAULT_SEARCH_SECONDARY_COOLDOWN_MS = 60_000;
+const MAX_SECONDARY_COOLDOWN_MS = 120_000;
 const MAX_RETRY_WAIT_MS = 60_000;
 
 export function resolveSearchPaceMs(override = null) {
@@ -14,6 +16,18 @@ export function resolveSearchPaceMs(override = null) {
   }
   const parsed = Number(raw);
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : DEFAULT_SEARCH_PACE_MS;
+}
+
+export function resolveSearchSecondaryCooldownMs(override = null) {
+  if (typeof override === "number" && Number.isFinite(override) && override >= 0) {
+    return override;
+  }
+  const raw = process.env.SCOUT_SEARCH_SECONDARY_COOLDOWN_MS;
+  if (raw === undefined || raw === "") {
+    return DEFAULT_SEARCH_SECONDARY_COOLDOWN_MS;
+  }
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : DEFAULT_SEARCH_SECONDARY_COOLDOWN_MS;
 }
 
 export function resolveSearchMaxRetries(override = null) {
@@ -77,19 +91,46 @@ export function computeSearchRetryDelayMs(attempt, retryAfterSeconds = null) {
   return exponential + jitter;
 }
 
-export function createSearchPacer(paceMs = resolveSearchPaceMs()) {
+export function computeSecondarySessionCooldownMs(
+  hitCount,
+  secondaryCooldownMs = resolveSearchSecondaryCooldownMs(),
+) {
+  if (!Number.isFinite(hitCount) || hitCount < 1) {
+    return 0;
+  }
+  const bumped = secondaryCooldownMs * 2 ** (hitCount - 1);
+  return Math.min(MAX_SECONDARY_COOLDOWN_MS, bumped);
+}
+
+export function createSearchSessionGuard({
+  paceMs = resolveSearchPaceMs(),
+  secondaryCooldownMs = resolveSearchSecondaryCooldownMs(),
+} = {}) {
   let lastPacedAt = 0;
-  return async function paceSearch() {
-    if (paceMs <= 0) {
-      return;
-    }
+  let cooldownUntil = 0;
+  let secondaryHitCount = 0;
+
+  async function paceSearch() {
     const now = Date.now();
-    if (lastPacedAt > 0) {
-      const elapsed = now - lastPacedAt;
-      if (elapsed < paceMs) {
-        await sleep(paceMs - elapsed);
-      }
+    const paceWait =
+      paceMs > 0 && lastPacedAt > 0 ? Math.max(0, paceMs - (now - lastPacedAt)) : 0;
+    const cooldownWait = Math.max(0, cooldownUntil - now);
+    const waitMs = Math.max(paceWait, cooldownWait);
+    if (waitMs > 0) {
+      await sleep(waitMs);
     }
     lastPacedAt = Date.now();
-  };
+  }
+
+  function onSecondaryLimitHit() {
+    secondaryHitCount += 1;
+    cooldownUntil = Date.now() + computeSecondarySessionCooldownMs(secondaryHitCount, secondaryCooldownMs);
+  }
+
+  return { paceSearch, onSecondaryLimitHit };
+}
+
+export function createSearchPacer(paceMs = resolveSearchPaceMs()) {
+  const { paceSearch } = createSearchSessionGuard({ paceMs, secondaryCooldownMs: 0 });
+  return paceSearch;
 }

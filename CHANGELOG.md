@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.4.7] — Discovery pacing and cooldown
+
+### Added
+- `createSearchSessionGuard` — inter-request pace plus session cooldown after secondary rate-limit hits
+- `resolveSearchSecondaryCooldownMs` — env `SCOUT_SEARCH_SECONDARY_COOLDOWN_MS` (default 60000, cap 120s with exponential bump)
+- Profile field `search_secondary_cooldown_ms`; `rewarded-hunt` preset `search_pace_ms: 5000`
+- Formance seed `search_query` override (3-label OR) in `rewarded-programs-algora`
+- Benchmark harness `--lane nocache|cached|both` (default `nocache`)
+
+### Changed
+- Default `SCOUT_SEARCH_PACE_MS` raised from 2500 to 4000
+- GitHub client calls `onSecondaryLimitHit()` on each secondary 403/429 retry attempt
+- CONTRIBUTING scan promotes all `extractPlatformUrls` hits (algora, issuehunt, opire)
+
 ## [0.4.6] — Bounty discovery P1
 
 ### Added

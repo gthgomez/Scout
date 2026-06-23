@@ -52,7 +52,16 @@ Baseline audit for `rewarded-hunt` after 0.4.4 OR-collapse. Artifact: [`.scout/b
 
 - Script: [`scripts/benchmark-rewarded-hunt.mjs`](../../scripts/benchmark-rewarded-hunt.mjs)
 - Wired into [`scripts/benchmark-discovery.ps1`](../../scripts/benchmark-discovery.ps1)
-- Run: `node scripts/benchmark-rewarded-hunt.mjs`
+- Run: `node scripts/benchmark-rewarded-hunt.mjs --lane nocache` (default; use `cached` or `both` when comparing cache behavior)
+
+### Quiet-period guidance (Wave 2 gate)
+
+Before a live benchmark after code changes or a failed burst run:
+
+1. Wait **30–60 minutes** after the prior `rewarded-hunt` profile run or benchmark (GitHub secondary rate limits are session-scoped).
+2. Use `--lane nocache` only for validation gates; avoid `--lane both` unless explicitly comparing cache lanes — back-to-back nocache + cached doubles API pressure.
+3. Confirm no other tools are hammering the same `GITHUB_TOKEN` search quota.
+4. If 403s persist at 0% target, tune `search_pace_ms` / `search_secondary_cooldown_ms` on `rewarded-hunt` and retry after another quiet window (max 2 tuning iterations before proceeding with documented degraded baseline).
 
 ---
 

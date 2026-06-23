@@ -6,7 +6,7 @@ Scout is a policy-enforced backend for finding open-source contribution candidat
 
 Policy gates **Scout CLI operations** only; harnesses must follow runbooks for allowed/denied actions outside Scout.
 
-Current release: **0.4.1** on `main`.
+Current release: **0.4.7** on `main`.
 
 ## Discovery Intents
 
@@ -25,10 +25,11 @@ Current release: **0.4.1** on `main`.
 | `SCOUT_ENRICH_MODE` | `auto`, `rest`, or `graphql` |
 | `SCOUT_CACHE_TTL_SEARCH` | Search cache TTL seconds (default 86400) |
 | `SCOUT_CACHE_TTL_METADATA` | Metadata cache TTL seconds (default 21600) |
-| `SCOUT_SEARCH_PACE_MS` | Minimum delay between GitHub search API calls (default 2500) |
+| `SCOUT_SEARCH_PACE_MS` | Minimum delay between GitHub search API calls (default 4000) |
 | `SCOUT_SEARCH_MAX_RETRIES` | Retries per search query on secondary rate limit (default 3) |
+| `SCOUT_SEARCH_SECONDARY_COOLDOWN_MS` | Session cooldown after secondary rate-limit hit (default 60000, cap 120s) |
 | Profile `prefetch_contributing` | Fetch CONTRIBUTING.md per repo during rewarded discovery (on `rewarded-hunt`) |
-| Profile `search_pace_ms` / `search_max_retries` | Override env search pacing for a profile run |
+| Profile `search_pace_ms` / `search_max_retries` / `search_secondary_cooldown_ms` | Override env search pacing and cooldown for a profile run |
 | `SCOUT_WEBHOOK_URL` | Optional user-owned webhook for monitor wrapper (not read by Scout CLI) |
 
 ## Workflow Presets

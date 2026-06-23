@@ -42,9 +42,6 @@ export function scanContributingRewardProgram(text, filePath = "CONTRIBUTING.md"
   }
 
   for (const { value: url, platform } of extractPlatformUrls(source)) {
-    if (platform !== "algora") {
-      continue;
-    }
     const key = `reward_signal:platform_url:${url.toLowerCase()}`;
     if (seen.has(key)) {
       continue;

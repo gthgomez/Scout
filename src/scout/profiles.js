@@ -79,6 +79,7 @@ export const PROFILE_PRESETS = Object.freeze({
     interleave_discovery_queries: true,
     reserve_broad_query_slots: 15,
     prefetch_contributing: true,
+    search_pace_ms: 5000,
     trusted_seed_lists: ["rewarded-programs", "rewarded-programs-algora"],
     include_queries: [
       "is:issue state:open label:algora no:assignee stars:>500",
@@ -135,6 +136,7 @@ export function createSearchProfile({
   prefetch_contributing,
   search_pace_ms,
   search_max_retries,
+  search_secondary_cooldown_ms,
 }) {
   const preset = presetDefaults(name);
   const now = new Date().toISOString();
@@ -171,6 +173,7 @@ export function createSearchProfile({
     prefetch_contributing: prefetch_contributing ?? preset.prefetch_contributing ?? false,
     search_pace_ms: search_pace_ms ?? preset.search_pace_ms ?? null,
     search_max_retries: search_max_retries ?? preset.search_max_retries ?? null,
+    search_secondary_cooldown_ms: search_secondary_cooldown_ms ?? preset.search_secondary_cooldown_ms ?? null,
     created_at: now,
     updated_at: now,
   });

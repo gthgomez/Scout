@@ -175,6 +175,9 @@ export function validateSearchProfile(profile) {
   assertOptionalFiniteInteger(profile.broad_green_min_usd, "SearchProfile.broad_green_min_usd", { min: 0 });
   assertOptionalFiniteInteger(profile.search_pace_ms, "SearchProfile.search_pace_ms", { min: 0 });
   assertOptionalFiniteInteger(profile.search_max_retries, "SearchProfile.search_max_retries", { min: 0 });
+  assertOptionalFiniteInteger(profile.search_secondary_cooldown_ms, "SearchProfile.search_secondary_cooldown_ms", {
+    min: 0,
+  });
   if (profile.shortlist_verdicts !== undefined) {
     assertArray(profile.shortlist_verdicts, "SearchProfile.shortlist_verdicts");
     for (const verdict of profile.shortlist_verdicts) {
@@ -202,6 +205,7 @@ export function validateSearchProfile(profile) {
     prefetch_contributing: profile.prefetch_contributing ?? false,
     search_pace_ms: profile.search_pace_ms ?? null,
     search_max_retries: profile.search_max_retries ?? null,
+    search_secondary_cooldown_ms: profile.search_secondary_cooldown_ms ?? null,
   };
 }
 

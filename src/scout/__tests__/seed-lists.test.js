@@ -105,6 +105,17 @@ describe("trusted seed lists", () => {
     assert.deepEqual(overlap, []);
   });
 
+  it("loads rewarded-programs-algora with formance search_query override", async () => {
+    const seedList = await loadTrustedSeedList("rewarded-programs-algora");
+    const formance = seedList.repos.find((entry) => entry.repo === "formancehq/formance");
+
+    assert.ok(formance);
+    assert.equal(
+      formance.search_query,
+      'repo:formancehq/formance is:issue state:open (label:"bounty" OR label:"algora" OR label:"reward") no:assignee',
+    );
+  });
+
   it("loads rewarded-programs with calcom org-scoped search_query override", async () => {
     const seedList = await loadTrustedSeedList("rewarded-programs");
     const calcom = seedList.repos.find((entry) => entry.repo === "calcom/cal.com");

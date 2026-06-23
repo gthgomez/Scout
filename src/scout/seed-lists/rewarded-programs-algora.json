@@ -6,7 +6,10 @@
     { "repo": "PostHog/posthog" },
     { "repo": "supabase/supabase" },
     { "repo": "makeplane/plane" },
-    { "repo": "formancehq/formance" },
+    {
+      "repo": "formancehq/formance",
+      "search_query": "repo:formancehq/formance is:issue state:open (label:\"bounty\" OR label:\"algora\" OR label:\"reward\") no:assignee"
+    },
     { "repo": "zio/zio" },
     { "repo": "golemcloud/golem" }
   ]
