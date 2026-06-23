@@ -1,4 +1,4 @@
-import { validateReportModel } from "./validators.js";
+import { validateReportModel, resolveRankShortlistBy } from "./validators.js";
 import { resolveTriageConfig } from "./triage.js";
 
 const VERDICT_ORDER = Object.freeze({ GREEN: 0, YELLOW: 1, GRAY: 2, RED: 3 });
@@ -229,9 +229,9 @@ export function selectShortlistDecisions(report, options = {}) {
   const profile = report.profile ?? {};
   const allowedVerdicts = new Set(profile.shortlist_verdicts ?? ["GREEN", "YELLOW", "GRAY"]);
   const byId = candidateById(report.candidates);
-  const rankByPayout = profile.rank_shortlist_by_payout === true;
+  const rankShortlistBy = resolveRankShortlistBy(profile);
 
-  return shortlistDecisions(report.decisions, { rankByPayout, candidateById: byId })
+  return shortlistDecisions(report.decisions, { rankShortlistBy, candidateById: byId })
     .filter((decision) => decision.verdict !== "RED" && allowedVerdicts.has(decision.verdict))
     .filter((decision) => {
       if (!profile.require_verified_reward) return true;
@@ -255,14 +255,14 @@ export function exportShortlist(report, options = {}) {
 
   if (discoveryIntent === "rewarded") {
     lines.push(
-      "| Rank | Verdict | Repo | Issue | Score | Reward Signal | Income Summary | Risk | Next Action |",
-      "| ---: | --- | --- | --- | ---: | --- | --- | --- | --- |",
+      "| Rank | Verdict | Repo | Issue | Score | ROI | Effort (h) | Reward Signal | Income Summary | Risk | Next Action |",
+      "| ---: | --- | --- | --- | ---: | ---: | ---: | --- | --- | --- | --- |",
     );
     for (const decision of shortlist) {
       const candidate = byId.get(decision.candidate_id);
       const rewardSignal = formatRewardSignal(candidate);
       lines.push(
-        `| ${decision.rank ?? ""} | ${decision.verdict} | ${candidate?.repo_owner ?? "unknown"}/${candidate?.repo_name ?? "unknown"} | ${escapeCell(candidate?.issue_title ?? decision.candidate_id)} | ${decision.score ?? ""} | ${escapeCell(rewardSignal)} | ${escapeCell(formatIncomeDisplay(candidate, decision.income_summary))} | ${escapeCell(decision.risk_summary ?? "")} | ${escapeCell(decision.human_next_action ?? "")} |`,
+        `| ${decision.rank ?? ""} | ${decision.verdict} | ${candidate?.repo_owner ?? "unknown"}/${candidate?.repo_name ?? "unknown"} | ${escapeCell(candidate?.issue_title ?? decision.candidate_id)} | ${decision.score ?? ""} | ${formatRoiCell(candidate?.roi_score)} | ${formatEffortCell(candidate?.estimated_effort_hours)} | ${escapeCell(rewardSignal)} | ${escapeCell(formatIncomeDisplay(candidate, decision.income_summary))} | ${escapeCell(decision.risk_summary ?? "")} | ${escapeCell(decision.human_next_action ?? "")} |`,
       );
     }
   } else {
@@ -318,18 +318,41 @@ function candidateById(candidates) {
 }
 
 function shortlistDecisions(decisions, options = {}) {
-  const rankByPayout = options.rankByPayout === true;
+  const rankShortlistBy = options.rankShortlistBy ?? "score";
   const candidateById = options.candidateById ?? new Map();
   return [...decisions].sort((a, b) => {
     const verdictCompare = VERDICT_ORDER[a.verdict] - VERDICT_ORDER[b.verdict];
     if (verdictCompare !== 0) return verdictCompare;
-    if (rankByPayout) {
-      const payoutA = candidateById.get(a.candidate_id)?.estimated_reward_usd ?? 0;
-      const payoutB = candidateById.get(b.candidate_id)?.estimated_reward_usd ?? 0;
-      if (payoutB !== payoutA) return payoutB - payoutA;
-    }
+
+    const sortKey = (decision) => {
+      const candidate = candidateById.get(decision.candidate_id);
+      if (rankShortlistBy === "roi") {
+        return candidate?.roi_score ?? 0;
+      }
+      if (rankShortlistBy === "payout") {
+        return candidate?.estimated_reward_usd ?? 0;
+      }
+      return decision.score ?? 0;
+    };
+
+    const keyCompare = sortKey(b) - sortKey(a);
+    if (keyCompare !== 0) return keyCompare;
     return (b.score ?? 0) - (a.score ?? 0);
   });
+}
+
+function formatRoiCell(value) {
+  if (value === null || value === undefined) {
+    return "";
+  }
+  return Number(value).toFixed(2);
+}
+
+function formatEffortCell(value) {
+  if (value === null || value === undefined) {
+    return "";
+  }
+  return String(value);
 }
 
 function renderRecommendedTable(decisions, candidates, evidence, discoveryIntent = "beginner") {

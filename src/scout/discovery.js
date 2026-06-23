@@ -15,6 +15,7 @@ import {
   shouldInterleaveDiscoveryQueries,
 } from "./discovery-query.js";
 import { createGitHubClient } from "./github-client.js";
+import { claimIssueKeys } from "./claims-ledger.js";
 import { applyContributingPrefetch } from "./contributing-prefetch.js";
 import { gitHubRateLimitFromHeaders } from "./github-rate-limit.js";
 
@@ -85,6 +86,7 @@ export async function discoverCandidates({
   skipKnownKeys = null,
   since = null,
   knownCandidates = null,
+  claimsLedger = null,
 }) {
   recordAllowed(policy, "github_search_read", auditLog);
   const client =
@@ -144,7 +146,7 @@ export async function discoverCandidates({
   }
 
   let deduped = applyProfileFilters(dedupeCandidates(candidates), profile).slice(0, limit);
-  deduped = applyIncrementalFilters(deduped, { skipKnownKeys, since });
+  deduped = applyIncrementalFilters(deduped, { skipKnownKeys, since, claimsLedger });
 
   if (!enrich) {
     return deduped;
@@ -210,7 +212,7 @@ function splitKnownCandidates(candidates, knownCandidates) {
   return { fresh, reused };
 }
 
-function applyIncrementalFilters(candidates, { skipKnownKeys, since }) {
+function applyIncrementalFilters(candidates, { skipKnownKeys, since, claimsLedger }) {
   let filtered = candidates;
   if (since) {
     const sinceMs = new Date(since).getTime();
@@ -219,8 +221,15 @@ function applyIncrementalFilters(candidates, { skipKnownKeys, since }) {
       return !Number.isNaN(sinceMs) && updated > sinceMs;
     });
   }
-  if (skipKnownKeys && skipKnownKeys.size > 0) {
-    filtered = filtered.filter((candidate) => !skipKnownKeys.has(candidateKey(candidate)));
+
+  const keysToSkip = new Set(skipKnownKeys ?? []);
+  if (claimsLedger) {
+    for (const key of claimIssueKeys(claimsLedger)) {
+      keysToSkip.add(key);
+    }
+  }
+  if (keysToSkip.size > 0) {
+    filtered = filtered.filter((candidate) => !keysToSkip.has(candidateKey(candidate)));
   }
   return filtered;
 }

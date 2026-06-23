@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.5.0] — ROI ranking and claim ledger
+
+### Added
+- `roi-ranking.js` — `estimated_effort_hours`, `claim_friction_score`, `stack_fit_score`, `roi_score` heuristics
+- Profile `rank_shortlist_by`: `"roi"` | `"payout"` | `"score"`; back-compat `rank_shortlist_by_payout: true` → `"payout"`
+- Profile fields `preferred_languages`, `excluded_languages`, `min_repo_stars`, `max_repo_stars`
+- `rewarded-hunt` default `rank_shortlist_by: "roi"`
+- Rewarded shortlist columns: ROI score and estimated effort hours
+- `claims-ledger.js` — local `.scout/claims/ledger.json` with `load`/`save`/`upsert`/`claimIssueKeys`
+- CLI `scout claims list|add|update`
+- Monitor merges active claim keys into discovery skip set
+
+### Changed
+- Triage attaches ROI fields during `triageCandidate` and sorts shortlist by `rank_shortlist_by`
+
 ## [0.4.7] — Discovery pacing and cooldown
 
 ### Added

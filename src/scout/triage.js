@@ -1,10 +1,12 @@
 import { isBroadDiscoveryCandidate } from "./discovery-query.js";
 import { resolveDiscoveryIntent } from "./profiles.js";
+import { resolveRankShortlistBy } from "./validators.js";
 import {
   bountySpamHardDropReason,
   bountySpamPenalty,
   isFromTrustedSeedList,
 } from "./bounty-spam.js";
+import { attachRoiFields } from "./roi-ranking.js";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
@@ -239,12 +241,14 @@ export function buildIncomeSummary(candidate) {
 }
 
 export function triageCandidate(candidate, options = {}) {
+  const now = options.now ?? new Date();
   const profile = options.profile ?? {
     profile_id: options.profile_id,
     threshold_overrides: options.threshold_overrides ?? {},
     discovery_intent: options.discovery_intent,
     require_trusted_seed: options.require_trusted_seed,
   };
+  attachRoiFields(candidate, profile, { now });
   const triageConfig = resolveTriageConfig(profile);
   const triagePolicy = resolveTriagePolicy(triageConfig.discovery_intent);
   const hardDrop = hardDropReason(candidate, { profile });
@@ -274,7 +278,6 @@ export function triageCandidate(candidate, options = {}) {
     };
   }
 
-  const now = options.now ?? new Date();
   const greenMinScore = triagePolicy.green_min_score_override ?? triageConfig.effective_thresholds.green_min_score;
   const stale = daysSince(candidate.updated_at, now) > triageConfig.effective_thresholds.max_issue_age_days;
   const partial = candidate.collection_status !== "OBSERVED";
@@ -418,23 +421,32 @@ export function hardDropReason(candidate, options = {}) {
 
 export function triageCandidates(candidates, options = {}) {
   const profile = options.profile ?? {};
-  const rankByPayout = profile.rank_shortlist_by_payout === true;
+  const rankShortlistBy = resolveRankShortlistBy(profile);
   const candidateById = new Map(candidates.map((candidate) => [candidate.candidate_id, candidate]));
 
   return candidates
     .map((candidate) => triageCandidate(candidate, options))
-    .sort((a, b) => compareTriageDecisions(a, b, { rankByPayout, candidateById }))
+    .sort((a, b) => compareTriageDecisions(a, b, { rankShortlistBy, candidateById }))
     .map((decision, index) => ({ ...decision, rank: decision.verdict === "RED" ? null : index + 1 }));
 }
 
-function compareTriageDecisions(a, b, { rankByPayout, candidateById }) {
+export function compareTriageDecisions(a, b, { rankShortlistBy = "score", candidateById }) {
   const verdictOrder = { GREEN: 0, YELLOW: 1, GRAY: 2, RED: 3 };
   const verdictCompare = verdictOrder[a.verdict] - verdictOrder[b.verdict];
   if (verdictCompare !== 0) return verdictCompare;
-  if (rankByPayout) {
-    const payoutA = candidateById.get(a.candidate_id)?.estimated_reward_usd ?? 0;
-    const payoutB = candidateById.get(b.candidate_id)?.estimated_reward_usd ?? 0;
-    if (payoutB !== payoutA) return payoutB - payoutA;
-  }
+
+  const sortKey = (decision) => {
+    const candidate = candidateById.get(decision.candidate_id);
+    if (rankShortlistBy === "roi") {
+      return candidate?.roi_score ?? 0;
+    }
+    if (rankShortlistBy === "payout") {
+      return candidate?.estimated_reward_usd ?? 0;
+    }
+    return decision.score ?? 0;
+  };
+
+  const keyCompare = sortKey(b) - sortKey(a);
+  if (keyCompare !== 0) return keyCompare;
   return (b.score ?? 0) - (a.score ?? 0);
 }

@@ -13,6 +13,19 @@ import { validateTrustedSeedListId } from "./seed-lists.js";
 import { WORKFLOW_STAGES } from "./session.js";
 import { resolveThresholds } from "./triage.js";
 
+export const RANK_SHORTLIST_BY_VALUES = Object.freeze(["roi", "payout", "score"]);
+
+export function resolveRankShortlistBy(profile = {}) {
+  if (profile.rank_shortlist_by !== undefined && profile.rank_shortlist_by !== null) {
+    assertEnum(profile.rank_shortlist_by, RANK_SHORTLIST_BY_VALUES, "SearchProfile.rank_shortlist_by");
+    return profile.rank_shortlist_by;
+  }
+  if (profile.rank_shortlist_by_payout === true) {
+    return "payout";
+  }
+  return "score";
+}
+
 function assertObject(value, name) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error(`${name} must be an object`);
@@ -170,6 +183,17 @@ export function validateSearchProfile(profile) {
       assertString(label, `SearchProfile.seed_reward_labels[${index}]`),
     );
   }
+  if (profile.rank_shortlist_by !== undefined && profile.rank_shortlist_by !== null) {
+    assertEnum(profile.rank_shortlist_by, RANK_SHORTLIST_BY_VALUES, "SearchProfile.rank_shortlist_by");
+  }
+  for (const field of ["preferred_languages", "excluded_languages"]) {
+    if (profile[field] !== undefined) {
+      assertArray(profile[field], `SearchProfile.${field}`);
+      profile[field].forEach((value, index) => assertString(value, `SearchProfile.${field}[${index}]`));
+    }
+  }
+  assertOptionalFiniteInteger(profile.min_repo_stars, "SearchProfile.min_repo_stars", { min: 0 });
+  assertOptionalFiniteInteger(profile.max_repo_stars, "SearchProfile.max_repo_stars", { min: 0 });
   assertOptionalFiniteInteger(profile.max_issues_per_query, "SearchProfile.max_issues_per_query", { min: 1 });
   assertOptionalFiniteInteger(profile.reserve_broad_query_slots, "SearchProfile.reserve_broad_query_slots", { min: 0 });
   assertOptionalFiniteInteger(profile.broad_green_min_usd, "SearchProfile.broad_green_min_usd", { min: 0 });
@@ -193,6 +217,11 @@ export function validateSearchProfile(profile) {
     require_verified_reward: profile.require_verified_reward ?? false,
     require_trusted_seed: profile.require_trusted_seed ?? false,
     rank_shortlist_by_payout: profile.rank_shortlist_by_payout ?? false,
+    rank_shortlist_by: resolveRankShortlistBy(profile),
+    preferred_languages: profile.preferred_languages ?? [],
+    excluded_languages: profile.excluded_languages ?? [],
+    min_repo_stars: profile.min_repo_stars ?? null,
+    max_repo_stars: profile.max_repo_stars ?? null,
     queries_prioritize_seeds: profile.queries_prioritize_seeds ?? false,
     seed_reward_labels: profile.seed_reward_labels ?? [],
     max_issues_per_query: profile.max_issues_per_query ?? null,

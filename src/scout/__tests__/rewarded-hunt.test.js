@@ -29,7 +29,7 @@ describe("rewarded-hunt preset", () => {
       ],
       require_verified_reward: false,
       require_trusted_seed: false,
-      rank_shortlist_by_payout: true,
+      rank_shortlist_by: "roi",
       queries_prioritize_seeds: true,
       broad_green_min_usd: 25,
       require_trusted_or_platform_for_broad_green: true,
@@ -55,6 +55,11 @@ describe("rewarded-hunt preset", () => {
       queries.slice(seedQueryCount).map((query) => (typeof query === "string" ? query : query.query)),
       profile.include_queries,
     );
+  });
+
+  it("defaults rank_shortlist_by to roi on rewarded-hunt profile", () => {
+    const profile = createSearchProfile({ name: "rewarded-hunt" });
+    assert.equal(profile.rank_shortlist_by, "roi");
   });
 
   it("builds label-scoped seed queries when profile labels are empty", async () => {

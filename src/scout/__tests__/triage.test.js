@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { hardDropReason, portfolioValueScore, scoreCandidate, triageCandidate, triageCandidates } from "../triage.js";
+import { hardDropReason, portfolioValueScore, scoreCandidate, triageCandidate, triageCandidates, compareTriageDecisions } from "../triage.js";
 
 const fixtures = JSON.parse(
   readFileSync(join(dirname(fileURLToPath(import.meta.url)), "fixtures", "candidates.json"), "utf8"),
@@ -284,5 +284,59 @@ describe("broad-query GREEN quality gate", () => {
     );
 
     assert.equal(decision.verdict, "GREEN");
+  });
+});
+
+describe("shortlist ranking modes", () => {
+  function rewardedCandidate(id, rewardUsd, effortBody = "Small fix", labels = ["good first issue"]) {
+    return {
+      ...fixtures.greenCandidate,
+      candidate_id: id,
+      discovery_intent: "rewarded",
+      has_verified_reward_signal: true,
+      has_inferred_reward_signal: true,
+      estimated_reward_usd: rewardUsd,
+      issue_body: effortBody,
+      labels,
+      reward_signals: [{ kind: "amount", value: `$${rewardUsd}`, confidence: "OBSERVED", source_ref: "issue_title" }],
+    };
+  }
+
+  it("ranks GREEN candidates by roi when rank_shortlist_by is roi", () => {
+    const highRoi = rewardedCandidate("SCOUT-high-roi", 100, "Fix typo", ["good first issue"]);
+    const lowRoi = rewardedCandidate("SCOUT-low-roi", 500, "x".repeat(3500), ["epic", "refactor"]);
+    const ranked = triageCandidates([lowRoi, highRoi], {
+      now: NOW,
+      profile: { discovery_intent: "rewarded", rank_shortlist_by: "roi" },
+    });
+
+    assert.equal(ranked[0].candidate_id, "SCOUT-high-roi");
+    assert.equal(ranked[1].candidate_id, "SCOUT-low-roi");
+  });
+
+  it("ranks GREEN candidates by payout when rank_shortlist_by is payout", () => {
+    const highRoi = rewardedCandidate("SCOUT-high-roi", 100);
+    const lowRoi = rewardedCandidate("SCOUT-low-roi", 500);
+    const ranked = triageCandidates([highRoi, lowRoi], {
+      now: NOW,
+      profile: { discovery_intent: "rewarded", rank_shortlist_by: "payout" },
+    });
+
+    assert.equal(ranked[0].candidate_id, "SCOUT-low-roi");
+    assert.equal(ranked[1].candidate_id, "SCOUT-high-roi");
+  });
+
+  it("maps rank_shortlist_by_payout true to payout ordering", () => {
+    const highRoi = rewardedCandidate("SCOUT-high-roi", 100);
+    const lowRoi = rewardedCandidate("SCOUT-low-roi", 500);
+    const byId = new Map([highRoi, lowRoi].map((candidate) => [candidate.candidate_id, candidate]));
+    const decisions = [
+      { candidate_id: "SCOUT-high-roi", verdict: "GREEN", score: 80 },
+      { candidate_id: "SCOUT-low-roi", verdict: "GREEN", score: 70 },
+    ];
+    const sorted = [...decisions].sort((a, b) =>
+      compareTriageDecisions(a, b, { rankShortlistBy: "payout", candidateById: byId }),
+    );
+    assert.equal(sorted[0].candidate_id, "SCOUT-low-roi");
   });
 });

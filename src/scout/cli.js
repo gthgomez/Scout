@@ -61,6 +61,13 @@ import {
 import { resolveDiscoveryIntent } from "./profiles.js";
 import { executeWorkflow, loadSessionManifest } from "./workflow.js";
 import { resolveWorkflowPreset } from "./session.js";
+import {
+  claimIssueKeys,
+  loadClaimsLedger,
+  saveClaimsLedger,
+  upsertClaim,
+  CLAIM_STATUSES,
+} from "./claims-ledger.js";
 
 async function main(argv) {
   const [command, ...args] = argv;
@@ -119,6 +126,9 @@ async function main(argv) {
   }
   if (command === "handoff") {
     return handoffCommand(args);
+  }
+  if (command === "claims") {
+    return claimsCommand(args);
   }
   if (command === "test-policy") {
     const { spawnSync } = await import("node:child_process");
@@ -521,6 +531,43 @@ async function profile(args) {
   throw new Error("profile command requires create or run");
 }
 
+async function claimsCommand(args) {
+  const action = args[0];
+  if (action === "list") {
+    const ledger = await loadClaimsLedger();
+    console.log(JSON.stringify(ledger, null, 2));
+    return 0;
+  }
+  if (action === "add" || action === "update") {
+    const issueUrl = readArg(args, "--issue-url", null);
+    if (!issueUrl) {
+      throw new Error(`claims ${action} requires --issue-url <url>.`);
+    }
+    const status = readArg(args, "--status", action === "add" ? "claimed" : null);
+    if (!status) {
+      throw new Error(`claims ${action} requires --status <${CLAIM_STATUSES.join("|")}>.`);
+    }
+    if (!CLAIM_STATUSES.includes(status)) {
+      throw new Error(`claims ${action} status must be one of: ${CLAIM_STATUSES.join(", ")}`);
+    }
+    const ledger = await loadClaimsLedger();
+    const updated = upsertClaim(ledger, {
+      issue_url: issueUrl,
+      candidate_id: readArg(args, "--candidate-id", null),
+      status,
+      platform_claim_url: readArg(args, "--platform-claim-url", null),
+      pr_url: readArg(args, "--pr-url", null),
+      claimed_at: readArg(args, "--claimed-at", null),
+      paid_at: readArg(args, "--paid-at", null),
+      notes: readArg(args, "--notes", ""),
+    });
+    await saveClaimsLedger(updated);
+    console.log(JSON.stringify(updated.claims.find((claim) => claim.issue_url === issueUrl), null, 2));
+    return 0;
+  }
+  throw new Error("claims command requires list, add, or update");
+}
+
 async function monitor(args) {
   const profileName = readArg(args, "--profile", "default");
   const out = readArg(args, "--out", "scout_watch_report.md");
@@ -531,9 +578,17 @@ async function monitor(args) {
   const profileModel = await loadProfileOrDefault(profileName);
   const policy = defaultPolicy("metadata_only");
   const previous = await loadMonitorSnapshot(profileName);
+  const claimsLedger = await loadClaimsLedger();
+  const skipKnownKeys = claimIssueKeys(claimsLedger);
+  if (skipKnown && previous) {
+    for (const key of buildKnownCandidatesMap(previous).keys()) {
+      skipKnownKeys.add(key);
+    }
+  }
   const discoveryOptions = {
     ...readDiscoveryOptions(args),
     ...(since ? { since } : {}),
+    ...(skipKnownKeys.size > 0 ? { skipKnownKeys } : {}),
     ...(skipKnown && previous ? { knownCandidates: buildKnownCandidatesMap(previous) } : {}),
   };
   const current = await buildProfileReport({ policy, profile: profileModel, discoveryOptions });
@@ -960,6 +1015,9 @@ Agent-facing CLI commands:
   scout workflow resume --session scout_session
   scout cockpit --report scout_report.json
   scout handoff --report scout_report.json --json-out handoff_package.json
+  scout claims list
+  scout claims add --issue-url https://github.com/org/repo/issues/42 --candidate-id SCOUT-org-repo-42 --status claimed
+  scout claims update --issue-url https://github.com/org/repo/issues/42 --status pr_open --pr-url https://github.com/org/repo/pull/99
   scout probe doctor
 
 Subcommand help: scout workflow --help | scout plan --help | scout probe --help

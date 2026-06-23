@@ -98,7 +98,11 @@
         "labels": { "type": "array" },
         "assignees": { "type": "array" },
         "linked_prs": { "type": "array" },
-        "source_observations": { "type": "array" }
+        "source_observations": { "type": "array" },
+        "estimated_effort_hours": { "type": ["number", "null"] },
+        "roi_score": { "type": ["number", "null"] },
+        "claim_friction_score": { "type": ["number", "null"] },
+        "stack_fit_score": { "type": ["number", "null"] }
       }
     },
     "evidenceItem": {
