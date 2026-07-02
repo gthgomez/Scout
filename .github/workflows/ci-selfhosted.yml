@@ -14,15 +14,18 @@ jobs:
   scout-ci:
     name: Scout CI
     runs-on: [self-hosted, windows]
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
       - name: Verify Node.js
         shell: pwsh
         run: |
+          $v = (node --version).TrimStart('v')
+          $major = [int]($v -split '\.')[0]
           node --version
-          if (-not (node --version).StartsWith("v20") -and -not (node --version).StartsWith("v22")) {
-            throw "Node 20+ required on self-hosted runner"
+          if ($major -lt 20) {
+            throw "Node 20+ required on self-hosted runner (found v$major)"
           }
 
       - name: Run Scout local CI
