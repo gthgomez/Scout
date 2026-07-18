@@ -75,8 +75,13 @@ export const PROFILE_PRESETS = Object.freeze({
     languages: [],
     labels: [],
     seed_reward_labels: ["bounty", "reward", "algora", "paid", "sponsor", "issuehunt", "💰"],
+    seed_body_queries: true,
+    require_unassigned: true,
     max_issues_per_query: 5,
-    max_issues_per_broad_query: 2,
+    max_issues_per_seed_query: 5,
+    max_issues_per_platform_query: 4,
+    max_issues_per_broad_query: 1,
+    seed_search_max_pages: 2,
     min_seed_candidate_slots: 5,
     interleave_discovery_queries: true,
     reserve_broad_query_slots: 15,
@@ -85,9 +90,12 @@ export const PROFILE_PRESETS = Object.freeze({
     exclude_repos: ["Scottcjn/rustchain-bounties"],
     trusted_seed_lists: ["rewarded-programs", "rewarded-programs-algora"],
     include_queries: [
-      "is:issue state:open label:algora no:assignee stars:>500",
-      "is:issue state:open label:issuehunt no:assignee stars:>500",
-      'is:issue state:open "algora.io" in:body no:assignee stars:>500',
+      "is:issue state:open label:algora no:assignee stars:>100",
+      "is:issue state:open label:issuehunt no:assignee stars:>100",
+      'is:issue state:open "algora.io" in:body no:assignee stars:>100',
+      'is:issue state:open "issuehunt.io" in:body no:assignee stars:>100',
+      'is:issue state:open "opire.dev" in:body no:assignee stars:>200',
+      'is:issue state:open "bounty" in:title no:assignee stars:>500',
       "is:issue state:open label:bounty no:assignee stars:>1000",
     ],
     require_verified_reward: false,
@@ -104,38 +112,56 @@ export const PROFILE_PRESETS = Object.freeze({
     languages: [],
     labels: [],
     seed_reward_labels: ["bounty", "reward", "algora", "paid", "sponsor", "issuehunt", "💰"],
+    // Budget: body dual-queries on every seed exploded live runs to 40+ searches.
+    // Cash-in prefers platform-first broad queries + lean seed label hits.
+    seed_body_queries: false,
+    require_unassigned: true,
     max_issues_per_query: 5,
+    max_issues_per_seed_query: 3,
+    max_issues_per_platform_query: 5,
     max_issues_per_broad_query: 2,
-    min_seed_candidate_slots: 5,
+    seed_search_max_pages: 1,
+    min_seed_candidate_slots: 4,
     interleave_discovery_queries: true,
-    reserve_broad_query_slots: 15,
+    reserve_broad_query_slots: 12,
     prefetch_contributing: true,
     search_pace_ms: 5000,
-    exclude_repos: ["Scottcjn/rustchain-bounties"],
-    trusted_seed_lists: ["rewarded-programs", "rewarded-programs-algora"],
+    exclude_repos: ["Scottcjn/rustchain-bounties", "unkeydev/unkey"],
+    trusted_seed_lists: ["rewarded-programs-algora", "rewarded-programs"],
     include_queries: [
-      "is:issue state:open label:algora no:assignee stars:>500",
-      "is:issue state:open label:issuehunt no:assignee stars:>500",
-      'is:issue state:open "algora.io" in:body no:assignee stars:>500',
+      // Platform-first (highest cash-in signal)
+      "is:issue state:open label:algora no:assignee stars:>100",
+      'is:issue state:open "algora.io" in:body no:assignee stars:>100',
+      "is:issue state:open label:issuehunt no:assignee stars:>100",
+      'is:issue state:open "issuehunt.io" in:body no:assignee stars:>100',
+      'is:issue state:open "opire.dev" in:body no:assignee stars:>200',
+      // Generic bounty last (spam-prone, capped via max_issues_per_broad_query)
       "is:issue state:open label:bounty no:assignee stars:>1000",
     ],
     require_verified_reward: false,
     require_trusted_seed: false,
     rank_shortlist_by: "roi",
-    queries_prioritize_seeds: true,
+    // Platform queries first so empty seeds do not consume the full search budget.
+    queries_prioritize_seeds: false,
     broad_green_min_usd: 25,
     require_trusted_or_platform_for_broad_green: true,
     green_requires_platform_or_trusted: true,
     shortlist_verdicts: ["GREEN"],
+    algora_platform_enrich: true,
   },
   "rewarded-hunt-dev": {
     discovery_intent: "rewarded",
     languages: [],
     labels: [],
     seed_reward_labels: ["bounty", "reward", "algora", "paid", "sponsor", "issuehunt", "💰"],
+    seed_body_queries: true,
+    require_unassigned: true,
     max_candidates: 15,
     max_issues_per_query: 5,
-    max_issues_per_broad_query: 2,
+    max_issues_per_seed_query: 5,
+    max_issues_per_platform_query: 4,
+    max_issues_per_broad_query: 1,
+    seed_search_max_pages: 2,
     min_seed_candidate_slots: 5,
     interleave_discovery_queries: true,
     reserve_broad_query_slots: 8,
@@ -144,8 +170,8 @@ export const PROFILE_PRESETS = Object.freeze({
     exclude_repos: ["Scottcjn/rustchain-bounties"],
     trusted_seed_lists: ["rewarded-programs", "rewarded-programs-algora"],
     include_queries: [
-      "is:issue state:open label:algora no:assignee stars:>500",
-      "is:issue state:open label:issuehunt no:assignee stars:>500",
+      "is:issue state:open label:algora no:assignee stars:>100",
+      "is:issue state:open label:issuehunt no:assignee stars:>100",
     ],
     require_verified_reward: false,
     require_trusted_seed: false,
@@ -154,6 +180,44 @@ export const PROFILE_PRESETS = Object.freeze({
     broad_green_min_usd: 25,
     require_trusted_or_platform_for_broad_green: true,
     green_requires_platform_or_trusted: true,
+    shortlist_verdicts: ["GREEN", "YELLOW"],
+    algora_platform_enrich: false,
+  },
+  "rewarded-explore": {
+    discovery_intent: "rewarded",
+    languages: [],
+    labels: [],
+    seed_reward_labels: ["bounty", "reward", "algora", "paid", "sponsor", "issuehunt", "💰"],
+    seed_body_queries: true,
+    require_unassigned: false,
+    max_issues_per_query: 5,
+    max_issues_per_seed_query: 5,
+    max_issues_per_platform_query: 4,
+    max_issues_per_broad_query: 1,
+    seed_search_max_pages: 2,
+    min_seed_candidate_slots: 5,
+    interleave_discovery_queries: true,
+    reserve_broad_query_slots: 15,
+    prefetch_contributing: true,
+    search_pace_ms: 5000,
+    exclude_repos: ["Scottcjn/rustchain-bounties"],
+    trusted_seed_lists: ["rewarded-programs", "rewarded-programs-algora"],
+    include_queries: [
+      "is:issue state:open label:algora no:assignee stars:>100",
+      "is:issue state:open label:issuehunt no:assignee stars:>100",
+      'is:issue state:open "algora.io" in:body no:assignee stars:>100',
+      'is:issue state:open "issuehunt.io" in:body no:assignee stars:>100',
+      'is:issue state:open "opire.dev" in:body no:assignee stars:>200',
+      'is:issue state:open "bounty" in:title no:assignee stars:>500',
+      "is:issue state:open label:bounty no:assignee stars:>1000",
+    ],
+    require_verified_reward: false,
+    require_trusted_seed: false,
+    rank_shortlist_by: "roi",
+    queries_prioritize_seeds: true,
+    broad_green_min_usd: 25,
+    require_trusted_or_platform_for_broad_green: true,
+    green_requires_platform_or_trusted: false,
     shortlist_verdicts: ["GREEN", "YELLOW"],
     algora_platform_enrich: false,
   },
@@ -205,6 +269,11 @@ export function createSearchProfile({
   repo_size_filter,
   prefetch_contributing,
   algora_platform_enrich,
+  seed_body_queries,
+  require_unassigned,
+  max_issues_per_seed_query,
+  max_issues_per_platform_query,
+  seed_search_max_pages,
   search_pace_ms,
   search_max_retries,
   search_secondary_cooldown_ms,
@@ -252,6 +321,11 @@ export function createSearchProfile({
     repo_size_filter: sizeFilter ?? null,
     prefetch_contributing: prefetch_contributing ?? preset.prefetch_contributing ?? false,
     algora_platform_enrich: algora_platform_enrich ?? preset.algora_platform_enrich ?? false,
+    seed_body_queries: seed_body_queries ?? preset.seed_body_queries ?? false,
+    require_unassigned: require_unassigned ?? preset.require_unassigned ?? true,
+    max_issues_per_seed_query: max_issues_per_seed_query ?? preset.max_issues_per_seed_query ?? null,
+    max_issues_per_platform_query: max_issues_per_platform_query ?? preset.max_issues_per_platform_query ?? null,
+    seed_search_max_pages: seed_search_max_pages ?? preset.seed_search_max_pages ?? null,
     search_pace_ms: search_pace_ms ?? preset.search_pace_ms ?? null,
     search_max_retries: search_max_retries ?? preset.search_max_retries ?? null,
     search_secondary_cooldown_ms: search_secondary_cooldown_ms ?? preset.search_secondary_cooldown_ms ?? null,
@@ -299,8 +373,8 @@ function seedQueriesFromProfile(profile, trustedSeedLists) {
       const seedRepo = normalizeSeedRepo(repoEntry);
       for (const query of queriesForSeedRepo(seedRepo, profile)) {
         seedQueries.push({
-          query,
-          kind: "trusted_seed_list",
+          query: query.text,
+          kind: query.variant === "body" ? "trusted_seed_body" : "trusted_seed_list",
           seed_list_id: seedList.seed_list_id,
           seed_list_name: seedList.name,
           repo: seedRepo.repo,
@@ -311,10 +385,25 @@ function seedQueriesFromProfile(profile, trustedSeedLists) {
   return seedQueries;
 }
 
+function assigneeClause(profile) {
+  return profile?.require_unassigned !== false ? " no:assignee" : "";
+}
+
+function buildSeedBodyQuery(seedRepo, profile) {
+  if (profile?.seed_body_queries !== true) {
+    return null;
+  }
+  const base = `repo:${seedRepo.repo} is:issue state:open ("algora.io" in:body OR "console.algora.io" in:body OR "issuehunt.io" in:body)${assigneeClause(profile)}`;
+  return appendRepoSizeFilter(base, profile);
+}
+
 function queriesForSeedRepo(seedRepo, profile) {
   const overrideQueries = seedListQueriesForSeedRepo(seedRepo);
   if (overrideQueries) {
-    return overrideQueries.map((query) => appendRepoSizeFilter(query, profile));
+    return overrideQueries.map((query) => ({
+      text: appendRepoSizeFilter(query, profile),
+      variant: "custom",
+    }));
   }
 
   let labels = seedRepo.labels ?? profile.labels;
@@ -322,23 +411,33 @@ function queriesForSeedRepo(seedRepo, profile) {
     labels = profile.seed_reward_labels;
   }
   const languages = seedRepo.languages ?? profile.languages;
+  const results = [];
+
   if (labels.length === 0) {
-    return [appendRepoSizeFilter(`repo:${seedRepo.repo} is:issue state:open no:assignee`, profile)];
+    results.push({
+      text: appendRepoSizeFilter(`repo:${seedRepo.repo} is:issue state:open${assigneeClause(profile)}`, profile),
+      variant: "labels",
+    });
+  } else {
+    const labelClause = buildLabelOrClause(labels);
+    const repoBase = `repo:${seedRepo.repo} is:issue state:open ${labelClause}${assigneeClause(profile)}`;
+
+    if (languages.length === 0) {
+      results.push({ text: appendRepoSizeFilter(repoBase, profile), variant: "labels" });
+    } else {
+      for (const language of languages) {
+        const query = language === "Docs" ? repoBase : `${repoBase} language:${language}`;
+        results.push({ text: appendRepoSizeFilter(query, profile), variant: "labels" });
+      }
+    }
   }
 
-  const labelClause = buildLabelOrClause(labels);
-  const repoBase = `repo:${seedRepo.repo} is:issue state:open ${labelClause} no:assignee`;
-
-  if (languages.length === 0) {
-    return [appendRepoSizeFilter(repoBase, profile)];
+  const bodyQuery = buildSeedBodyQuery(seedRepo, profile);
+  if (bodyQuery) {
+    results.push({ text: bodyQuery, variant: "body" });
   }
 
-  const queries = [];
-  for (const language of languages) {
-    const query = language === "Docs" ? repoBase : `${repoBase} language:${language}`;
-    queries.push(appendRepoSizeFilter(query, profile));
-  }
-  return queries;
+  return results;
 }
 
 function buildLabelOrClause(labels) {

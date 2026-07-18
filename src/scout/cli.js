@@ -66,8 +66,12 @@ import {
   loadClaimsLedger,
   saveClaimsLedger,
   upsertClaim,
+  summarizeClaimsLedger,
+  normalizeClaimStatus,
   CLAIM_STATUSES,
+  CLAIM_STATUS_ALIASES,
 } from "./claims-ledger.js";
+import { buildIncomeActionSummary, buildWebhookPayload } from "./income-ops.js";
 
 async function main(argv) {
   const [command, ...args] = argv;
@@ -390,8 +394,21 @@ async function discover(args) {
   const limit = Number(readArg(args, "--limit", "50"));
   const out = readArg(args, "--out", "scout_report.md");
   const jsonOut = readArg(args, "--json-out", null);
+  const profileName = readArg(args, "--profile", null);
+  const queryStatsOnly = readFlag(args, "--query-stats-only");
   const policy = defaultPolicy(mode);
-  const report = await buildReport({ policy, limit, discoveryOptions: readDiscoveryOptions(args) });
+  const discoveryOptions = {
+    ...readDiscoveryOptions(args),
+    enrich: !queryStatsOnly,
+    queryStatsOnly,
+  };
+  const report = profileName
+    ? await buildProfileReport({
+        policy,
+        profile: await loadProfileOrDefault(profileName),
+        discoveryOptions,
+      })
+    : await buildReport({ policy, limit, discoveryOptions });
   await writeReportOutputs(report, out, jsonOut);
   console.log(`Scout discovery report written to ${out}`);
   if (jsonOut) console.log(`Scout machine report written to ${jsonOut}`);
@@ -538,34 +555,43 @@ async function claimsCommand(args) {
     console.log(JSON.stringify(ledger, null, 2));
     return 0;
   }
+  if (action === "stats") {
+    const ledger = await loadClaimsLedger();
+    console.log(JSON.stringify(summarizeClaimsLedger(ledger), null, 2));
+    return 0;
+  }
   if (action === "add" || action === "update") {
     const issueUrl = readArg(args, "--issue-url", null);
     if (!issueUrl) {
       throw new Error(`claims ${action} requires --issue-url <url>.`);
     }
-    const status = readArg(args, "--status", action === "add" ? "claimed" : null);
-    if (!status) {
-      throw new Error(`claims ${action} requires --status <${CLAIM_STATUSES.join("|")}>.`);
+    const statusRaw = readArg(args, "--status", action === "add" ? "claimed" : null);
+    if (!statusRaw) {
+      throw new Error(
+        `claims ${action} requires --status <${CLAIM_STATUSES.join("|")}> (aliases: ${Object.keys(CLAIM_STATUS_ALIASES).join("|")}).`,
+      );
     }
-    if (!CLAIM_STATUSES.includes(status)) {
-      throw new Error(`claims ${action} status must be one of: ${CLAIM_STATUSES.join(", ")}`);
-    }
+    const status = normalizeClaimStatus(statusRaw);
+    const candidateId = readArg(args, "--candidate-id", readArg(args, "--id", null));
+    const notes = readArg(args, "--notes", readArg(args, "--note", ""));
+    const amountUsd = readArg(args, "--amount-usd", null);
     const ledger = await loadClaimsLedger();
     const updated = upsertClaim(ledger, {
       issue_url: issueUrl,
-      candidate_id: readArg(args, "--candidate-id", null),
+      candidate_id: candidateId,
       status,
       platform_claim_url: readArg(args, "--platform-claim-url", null),
       pr_url: readArg(args, "--pr-url", null),
       claimed_at: readArg(args, "--claimed-at", null),
       paid_at: readArg(args, "--paid-at", null),
-      notes: readArg(args, "--notes", ""),
+      amount_usd: amountUsd === null ? undefined : amountUsd,
+      notes,
     });
     await saveClaimsLedger(updated);
     console.log(JSON.stringify(updated.claims.find((claim) => claim.issue_url === issueUrl), null, 2));
     return 0;
   }
-  throw new Error("claims command requires list, add, or update");
+  throw new Error("claims command requires list, add, update, or stats");
 }
 
 async function monitor(args) {
@@ -613,6 +639,14 @@ async function monitor(args) {
   if (notify) {
     const summary = summarizeMonitorEvents(monitorEvents);
     console.log(`SCOUT_MONITOR profile=${profileName} new=${summary.new} improved=${summary.improved} downgraded=${summary.downgraded} missing=${summary.missing}`);
+    const action = buildIncomeActionSummary(report, { includeYellow: true, limit: 3 });
+    if (action.top_candidate) {
+      console.log(
+        `SCOUT_TOP ${action.top_candidate.candidate_id} verdict=${action.top_candidate.verdict} roi=${action.top_candidate.roi_score ?? "n/a"} payout=${action.top_candidate.estimated_reward_usd ?? "n/a"}`,
+      );
+    }
+    // Machine line for income-ops.ps1 webhook enrichment (parse-friendly).
+    console.log(`SCOUT_WEBHOOK_JSON ${JSON.stringify(buildWebhookPayload({ mode: "daily", report, summary: action }))}`);
   }
   return monitorHasActionableEvents(monitorEvents) ? 1 : 0;
 }
@@ -717,7 +751,9 @@ async function buildReport({ policy, limit, queries, profile = null, discoveryOp
   const auditLog = new AuditLog();
   const evidence = [];
   const collectionErrors = [];
+  const discoveryQueryStats = [];
   const activeQueries = queries ?? DEFAULT_QUERIES;
+  const queryStatsOnly = discoveryOptions.queryStatsOnly === true;
   let candidates;
   try {
     candidates = await discoverCandidates({
@@ -727,6 +763,7 @@ async function buildReport({ policy, limit, queries, profile = null, discoveryOp
       auditLog,
       collectionErrors,
       profile,
+      discoveryQueryStats,
       ...discoveryOptions,
     });
   } catch (error) {
@@ -757,11 +794,12 @@ async function buildReport({ policy, limit, queries, profile = null, discoveryOp
     candidates = [];
   }
   appendCandidateMetadataEvidence(candidates, evidence);
-  const decisions = triageCandidates(candidates, { profile });
+  const decisions = queryStatsOnly ? [] : triageCandidates(candidates, { profile });
   const runStatus = determineRunStatus({ candidates, collectionErrors, queryCount: activeQueries.length || 1 });
   return createReportModel({
     run_status: runStatus,
     collection_errors: collectionErrors,
+    discovery_query_stats: discoveryQueryStats,
     candidates,
     decisions,
     evidence,
@@ -785,6 +823,7 @@ function readDiscoveryOptions(args) {
   const enrichMode = readArg(args, "--enrich-mode", null);
   return {
     cacheEnabled: !readFlag(args, "--no-cache"),
+    queryStatsOnly: readFlag(args, "--query-stats-only"),
     ...(enrichMode ? { enrichMode } : {}),
   };
 }
@@ -997,11 +1036,12 @@ function printProbeHelp() {
 }
 
 function printHelp() {
-  console.log(`Scout 0.6.0
+  console.log(`Scout 0.6.1
 
 Agent-facing CLI commands:
   scout run --safe --limit 50 --out scout_report.md
   scout discover --limit 50 --no-cache --enrich-mode auto --out scout_report.md --json-out scout_report.json
+  scout discover --profile rewarded-hunt --query-stats-only --out scout_query_stats.md --json-out scout_query_stats.json
   scout inspect --report scout_report.json --candidate-id SCOUT-0001 --out scout_static_report.md
   scout inspect --report scout_report.json --manifest manifest.json --out scout_static_report.md
   scout validate-report --report scout_report.json
@@ -1016,8 +1056,11 @@ Agent-facing CLI commands:
   scout cockpit --report scout_report.json
   scout handoff --report scout_report.json --json-out handoff_package.json
   scout claims list
+  scout claims stats
   scout claims add --issue-url https://github.com/org/repo/issues/42 --candidate-id SCOUT-org-repo-42 --status claimed
+  scout claims add --issue-url https://github.com/org/repo/issues/42 --status in_progress
   scout claims update --issue-url https://github.com/org/repo/issues/42 --status pr_open --pr-url https://github.com/org/repo/pull/99
+  scout claims update --issue-url https://github.com/org/repo/issues/42 --status paid --amount-usd 150
   scout probe doctor
 
 Subcommand help: scout workflow --help | scout plan --help | scout probe --help

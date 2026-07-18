@@ -60,6 +60,26 @@ export function computeEffortEstimate(candidate) {
   return clamp(1, 40, hours);
 }
 
+export function isStaleClaimOpportunity(candidate, options = {}) {
+  const staleDays = options.staleClaimDays ?? 14;
+  const now = options.now ?? new Date();
+  const hasAssigneeOrAttempt =
+    (candidate.assignees?.length ?? 0) > 0 ||
+    candidate.has_attempt_comment ||
+    candidate.claimed_in_comments;
+  if (!hasAssigneeOrAttempt) {
+    return false;
+  }
+  if (candidate.linked_prs?.some((pr) => pr.likely_solves_issue)) {
+    return false;
+  }
+  if (candidate.has_open_linked_pr) {
+    return false;
+  }
+  const lastActivity = candidate.last_comment_at ?? candidate.updated_at;
+  return daysSince(lastActivity, now) >= staleDays;
+}
+
 export function computeClaimFrictionScore(candidate, options = {}) {
   const now = options.now ?? new Date();
   let score = 0;
@@ -76,7 +96,23 @@ export function computeClaimFrictionScore(candidate, options = {}) {
   if (daysSince(candidate.latest_maintainer_activity_at, now) < 30) {
     score += 15;
   }
-  if (candidate.claimed_in_comments) {
+
+  const commentCount = candidate.comment_count ?? candidate.comments_count;
+  if (typeof commentCount === "number") {
+    if (commentCount <= 3) {
+      score += 10;
+    } else if (commentCount > 15) {
+      score -= 10;
+    }
+  }
+
+  if (isStaleClaimOpportunity(candidate, options)) {
+    score += 25;
+  }
+  if (candidate.has_open_linked_pr) {
+    score -= 40;
+  }
+  if (candidate.claimed_in_comments && !isStaleClaimOpportunity(candidate, options)) {
     score -= 50;
   }
   if (candidate.linked_prs?.some((pr) => pr.likely_solves_issue)) {
@@ -197,5 +233,6 @@ export function attachRoiFields(candidate, profile = {}, options = {}) {
   candidate.roi_score_inferred = roiFields.roi_score_inferred;
   candidate.roi_confidence = roiFields.roi_confidence;
   candidate.discovery_source = formatDiscoverySource(candidate);
+  candidate.is_stale_claim_opportunity = isStaleClaimOpportunity(candidate, options);
   return candidate;
 }

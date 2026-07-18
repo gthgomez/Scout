@@ -1,5 +1,44 @@
 # Changelog
 
+## [0.6.2] — Income ops pack + cash-in yield budget
+
+### Added
+- Architecture ADR + phase checklist: `docs/architecture/income-funnel.md`, `INCOME_FUNNEL_PHASE_CHECKLIST.md`
+- Claim status aliases (`in_progress`→`claimed`, `submitted`→`pr_open`, …) + `claims stats`
+- Optional `amount_usd` / `amount_currency` on claims ledger for cash scorecard
+- `src/scout/income-ops.js` — top-candidate ranking, webhook payload, scorecard helpers
+- `scripts/act-top1.mjs` — pick top GREEN/YELLOW and optional full workflow
+- `scripts/income-scorecard.mjs` + `scripts/webhook-payload.mjs`
+- `income-ops.ps1` modes: `daily` (rich webhook + act-top1 dry-run), `act`, `scorecard`, `weekly` (+ scorecard)
+
+### Changed
+- `rewarded-cash-in`: platform-first queries, seed body dual-queries off, leaner seeds, query budget ≤25 intent
+- Seed lists pruned (drop low-yield / 422 repos; exclude `unkeydev/unkey`)
+- Monitor `--notify` emits `SCOUT_TOP` + `SCOUT_WEBHOOK_JSON` lines
+- Docs: `docs/income-ops.md` aligned with canonical claim vocabulary
+
+## [0.6.1] — Discovery yield improvement
+
+### Added
+- Dual seed queries: OR-label + `algora.io` / `console.algora.io` in-body (`trusted_seed_body` kind)
+- Per-repo `search_queries` array overrides in trusted seed lists
+- `scripts/audit-seed-queries.mjs` — seed query hit-count audit
+- `rewarded-explore` preset — YELLOW shortlist, relaxed `green_requires_platform_or_trusted`
+- `discovery_query_stats` on reports + **Discovery Coverage** markdown table
+- `scout discover --profile <id> --query-stats-only` — search stats without enrich/triage
+- Profile fields: `seed_body_queries`, `require_unassigned`, `max_issues_per_seed_query`, `max_issues_per_platform_query`, `seed_search_max_pages`
+- Benchmark targets: `min_seed_queries_with_hits`, `min_platform_query_hits`
+- Seed search pagination (up to `seed_search_max_pages` for seed queries)
+- Opire broad query and `in:title` bounty broad query
+
+### Changed
+- Platform broad queries use `stars:>100`; generic `label:bounty` capped at 1 item per query
+- Platform broad queries cap at 4 items; seed queries at 5
+- Expanded `rewarded-programs-algora` seed list to 10 repos
+- `rewarded-cash-in` enables `algora_platform_enrich: true`
+- Spam hard-drop skips `[$NN BOUNTY]` titles when OBSERVED `platform_url` is present
+- `isFromTrustedSeedList` includes `trusted_seed_body` observations
+
 ## [0.6.0] — Algora read-only enrich (gated)
 
 ### Added

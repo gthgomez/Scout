@@ -175,6 +175,8 @@ export function validateSearchProfile(profile) {
     "prefetch_contributing",
     "green_requires_platform_or_trusted",
     "algora_platform_enrich",
+    "seed_body_queries",
+    "require_unassigned",
   ]) {
     if (profile[field] !== undefined && typeof profile[field] !== "boolean") {
       throw new Error(`SearchProfile.${field} must be a boolean`);
@@ -201,6 +203,13 @@ export function validateSearchProfile(profile) {
   assertOptionalFiniteInteger(profile.max_issues_per_broad_query, "SearchProfile.max_issues_per_broad_query", {
     min: 1,
   });
+  assertOptionalFiniteInteger(profile.max_issues_per_seed_query, "SearchProfile.max_issues_per_seed_query", {
+    min: 1,
+  });
+  assertOptionalFiniteInteger(profile.max_issues_per_platform_query, "SearchProfile.max_issues_per_platform_query", {
+    min: 1,
+  });
+  assertOptionalFiniteInteger(profile.seed_search_max_pages, "SearchProfile.seed_search_max_pages", { min: 1 });
   assertOptionalFiniteInteger(profile.min_seed_candidate_slots, "SearchProfile.min_seed_candidate_slots", { min: 0 });
   assertOptionalFiniteInteger(profile.reserve_broad_query_slots, "SearchProfile.reserve_broad_query_slots", { min: 0 });
   assertOptionalFiniteInteger(profile.broad_green_min_usd, "SearchProfile.broad_green_min_usd", { min: 0 });
@@ -243,6 +252,8 @@ export function validateSearchProfile(profile) {
     repo_size_filter: profile.repo_size_filter ?? null,
     prefetch_contributing: profile.prefetch_contributing ?? false,
     algora_platform_enrich: profile.algora_platform_enrich ?? false,
+    seed_body_queries: profile.seed_body_queries ?? false,
+    require_unassigned: profile.require_unassigned ?? true,
     search_pace_ms: profile.search_pace_ms ?? null,
     search_max_retries: profile.search_max_retries ?? null,
     search_secondary_cooldown_ms: profile.search_secondary_cooldown_ms ?? null,
@@ -414,6 +425,13 @@ export function validateReportModel(report) {
   assertObject(report, "ScoutReport");
   assertEnum(report.run_status, RUN_STATUSES, "ScoutReport.run_status");
   assertArray(report.collection_errors, "ScoutReport.collection_errors");
+  if (report.discovery_query_stats !== undefined) {
+    assertArray(report.discovery_query_stats, "ScoutReport.discovery_query_stats");
+    for (const [index, stat] of report.discovery_query_stats.entries()) {
+      assertObject(stat, `ScoutReport.discovery_query_stats[${index}]`);
+      assertString(stat.query ?? "", `ScoutReport.discovery_query_stats[${index}].query`);
+    }
+  }
   assertArray(report.candidates, "ScoutReport.candidates");
   assertArray(report.evidence, "ScoutReport.evidence");
   assertArray(report.decisions, "ScoutReport.decisions");

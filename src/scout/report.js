@@ -20,6 +20,7 @@ export function createReportModel({
   profile = undefined,
   triage_config = undefined,
   discovery_intent = undefined,
+  discovery_query_stats = undefined,
 }) {
   const resolvedIntent =
     discovery_intent ?? profile?.discovery_intent ?? triage_config?.discovery_intent ?? "beginner";
@@ -32,6 +33,7 @@ export function createReportModel({
       "No unapproved clone, package install, repo script, GitHub write, or dynamic probe was attempted in this report.",
     triage_config: createTriageConfig(profile, triage_config),
     collection_errors,
+    discovery_query_stats: discovery_query_stats ?? [],
     candidates,
     evidence,
     decisions,
@@ -99,6 +101,10 @@ export function renderMarkdownReport(report) {
     "## Evidence Log",
     "",
     renderEvidence(report.evidence),
+    "",
+    "## Discovery Coverage",
+    "",
+    renderDiscoveryCoverage(report.discovery_query_stats),
     "",
     "## Collection Errors",
     "",
@@ -293,6 +299,22 @@ function formatNonUsdReward(candidate) {
   return null;
 }
 
+function renderDiscoveryCoverage(stats = []) {
+  if (!stats.length) {
+    return "- No discovery query stats recorded.";
+  }
+  const lines = [
+    "| Kind | Query | Returned | Selected | Pages | Error |",
+    "| --- | --- | ---: | ---: | ---: | --- |",
+  ];
+  for (const stat of stats) {
+    lines.push(
+      `| ${escapeCell(stat.kind ?? "broad")} | ${escapeCell(stat.query ?? "")} | ${stat.items_returned ?? 0} | ${stat.items_selected ?? 0} | ${stat.pages_fetched ?? 1} | ${escapeCell(stat.error ?? "")} |`,
+    );
+  }
+  return lines.join("\n");
+}
+
 function formatIncomeDisplay(candidate, incomeSummary) {
   const nonUsd = formatNonUsdReward(candidate);
   if (nonUsd) {
@@ -364,6 +386,20 @@ function formatFrictionCell(value) {
   return String(value);
 }
 
+function formatPlatformObserved(candidate) {
+  if (!candidate) {
+    return "";
+  }
+  const parts = [];
+  if (candidate.platform_status_observed) {
+    parts.push(`status:${candidate.platform_status_observed}`);
+  }
+  if (candidate.platform_amount_observed != null) {
+    parts.push(`amount:${candidate.platform_amount_observed}`);
+  }
+  return parts.join(" ");
+}
+
 function formatEffortCell(value) {
   if (value === null || value === undefined) {
     return "";
@@ -376,14 +412,14 @@ function renderRecommendedTable(decisions, candidates, evidence, discoveryIntent
   const evidenceByCandidateId = evidenceIdsByCandidate(evidence);
   if (discoveryIntent === "rewarded") {
     const rows = [
-      "| Rank | Verdict | Source | Repo | Stack | Issue | Link | Score | ROI | Friction | Reward Signal | Income Summary | Risk | Evidence IDs | Human Next Action |",
-      "| ---: | --- | --- | --- | --- | --- | --- | ---: | ---: | ---: | --- | --- | --- | --- | --- |",
+      "| Rank | Verdict | Source | Repo | Stack | Issue | Link | Score | ROI | Friction | Platform | Reward Signal | Income Summary | Risk | Evidence IDs | Human Next Action |",
+      "| ---: | --- | --- | --- | --- | --- | --- | ---: | ---: | ---: | --- | --- | --- | --- | --- | --- |",
     ];
     for (const decision of decisions) {
       const candidate = byId.get(decision.candidate_id);
       const evidenceIds = evidenceByCandidateId.get(decision.candidate_id) ?? [];
       rows.push(
-        `| ${decision.rank ?? ""} | ${decision.verdict} | ${candidate?.discovery_source ?? "unknown"} | ${candidate?.repo_owner}/${candidate?.repo_name} | ${candidate?.primary_language ?? "unknown"} | ${escapeCell(candidate?.issue_title ?? decision.candidate_id)} | ${candidate?.issue_url ?? ""} | ${decision.score ?? ""} | ${formatRoiCell(candidate)} | ${formatFrictionCell(candidate?.claim_friction_score)} | ${escapeCell(formatRewardSignal(candidate))} | ${escapeCell(formatIncomeDisplay(candidate, decision.income_summary))} | ${escapeCell(decision.risk_summary)} | ${escapeCell(evidenceIds.join(", "))} | ${escapeCell(decision.human_next_action)} |`,
+        `| ${decision.rank ?? ""} | ${decision.verdict} | ${candidate?.discovery_source ?? "unknown"} | ${candidate?.repo_owner}/${candidate?.repo_name} | ${candidate?.primary_language ?? "unknown"} | ${escapeCell(candidate?.issue_title ?? decision.candidate_id)} | ${candidate?.issue_url ?? ""} | ${decision.score ?? ""} | ${formatRoiCell(candidate)} | ${formatFrictionCell(candidate?.claim_friction_score)} | ${escapeCell(formatPlatformObserved(candidate))} | ${escapeCell(formatRewardSignal(candidate))} | ${escapeCell(formatIncomeDisplay(candidate, decision.income_summary))} | ${escapeCell(decision.risk_summary)} | ${escapeCell(evidenceIds.join(", "))} | ${escapeCell(decision.human_next_action)} |`,
       );
     }
     return rows.join("\n");

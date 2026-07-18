@@ -12,13 +12,17 @@ export function normalizeQueryDescriptor(queryEntry) {
   return queryEntry;
 }
 
+const TRUSTED_SEED_QUERY_KINDS = Object.freeze(["trusted_seed_list", "trusted_seed_body"]);
+
 function isTrustedSeedQueryDescriptor(queryEntry) {
   const descriptor = normalizeQueryDescriptor(queryEntry);
-  return descriptor?.kind === "trusted_seed_list";
+  return TRUSTED_SEED_QUERY_KINDS.includes(descriptor?.kind);
 }
 
 function candidateHasTrustedSeedObservation(candidate) {
-  return (candidate?.source_observations ?? []).some((observation) => observation.kind === "trusted_seed_list");
+  return (candidate?.source_observations ?? []).some((observation) =>
+    TRUSTED_SEED_QUERY_KINDS.includes(observation.kind),
+  );
 }
 
 function discoveredByTrustedSeedQuery(candidate) {
@@ -83,10 +87,45 @@ export function resolveMaxIssuesPerBroadQuery(profile) {
   return typeof value === "number" && value > 0 ? value : null;
 }
 
+export function isPlatformBroadQuery(query) {
+  const normalized = String(query ?? "").toLowerCase();
+  return (
+    normalized.includes("label:algora") ||
+    normalized.includes("label:issuehunt") ||
+    normalized.includes("algora.io") ||
+    normalized.includes("opire.dev") ||
+    normalized.includes("in:title")
+  );
+}
+
+export function resolveMaxIssuesPerSeedQuery(profile) {
+  const value = profile?.max_issues_per_seed_query;
+  return typeof value === "number" && value > 0 ? value : resolveMaxIssuesPerQuery(profile);
+}
+
+export function resolveMaxIssuesPerPlatformQuery(profile) {
+  const value = profile?.max_issues_per_platform_query;
+  if (typeof value === "number" && value > 0) {
+    return value;
+  }
+  return resolveMaxIssuesPerBroadQuery(profile) ?? resolveMaxIssuesPerQuery(profile);
+}
+
+export function resolveSeedSearchMaxPages(profile) {
+  const value = profile?.seed_search_max_pages;
+  if (typeof value === "number" && value > 0) {
+    return Math.min(value, 3);
+  }
+  return 1;
+}
+
 export function resolveMaxPerQueryForEntry(profile, queryEntry) {
   const descriptor = normalizeQueryDescriptor(queryEntry);
-  if (descriptor.kind === "trusted_seed_list") {
-    return resolveMaxIssuesPerQuery(profile);
+  if (TRUSTED_SEED_QUERY_KINDS.includes(descriptor.kind)) {
+    return resolveMaxIssuesPerSeedQuery(profile);
+  }
+  if (isPlatformBroadQuery(descriptor.query)) {
+    return resolveMaxIssuesPerPlatformQuery(profile);
   }
   return resolveMaxIssuesPerBroadQuery(profile) ?? resolveMaxIssuesPerQuery(profile);
 }

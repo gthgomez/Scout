@@ -173,10 +173,11 @@ export function createGitHubClient({
     return { body, rate_limit: rateLimit, from_cache: false };
   }
 
-  async function searchIssues(query, perPage) {
+  async function searchIssues(query, perPage, page = 1) {
     const url = new URL("https://api.github.com/search/issues");
     url.searchParams.set("q", query);
     url.searchParams.set("per_page", String(perPage));
+    url.searchParams.set("page", String(page));
     const urlString = url.toString();
     const maxRetries = resolveSearchMaxRetries(searchMaxRetries);
     let lastError = null;

@@ -61,6 +61,27 @@ describe("bounty spam detection", () => {
     assert.equal(bountySpamHardDropReason(candidate), null);
     assert.equal(bountySpamPenalty(candidate).penalty, 0);
   });
+
+  it("skips dollar bounty title hard-drop when platform_url is observed", () => {
+    const candidate = {
+      repo_owner: "acme",
+      repo_name: "tooling",
+      issue_title: "[$150 BOUNTY] Fix API handler",
+      latest_maintainer_activity_at: null,
+      reward_signals: [
+        {
+          kind: "platform_url",
+          value: "https://algora.io/bounties/acme/tooling/12",
+          confidence: "OBSERVED",
+        },
+      ],
+    };
+    assert.equal(
+      detectBountySpamSignals(candidate).some((signal) => signal.kind === "title_template"),
+      false,
+    );
+    assert.equal(bountySpamHardDropReason(candidate), null);
+  });
 });
 
 describe("rewarded-trusted-only preset", () => {

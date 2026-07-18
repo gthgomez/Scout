@@ -27,6 +27,7 @@ if ($LASTEXITCODE -eq 1) {
 
 - Profiles retain `discovery_intent`; beginner and rewarded monitors use the same pipeline with intent-aware triage.
 - **Rewarded cash-in workflow (default):** use profile `rewarded-cash-in` for GREEN-only shortlists that require trusted seed or platform URL.
+- **Income ops loop:** see [`docs/income-ops.md`](../../../docs/income-ops.md) and `scripts/income-ops.ps1`.
 - **Daily cached monitor:** `scout monitor --profile rewarded-cash-in --skip-known --notify --out scout_watch_report.md --json-out scout_watch_report.json`
 - **Weekly nocache audit:** `node scripts/benchmark-rewarded-hunt.mjs --lane nocache` — verify precision targets (`max_spam_farm_green: 0`, `min_green_from_trusted_or_platform_pct: 0.8`).
 - **Local iteration:** `scout profile run rewarded-hunt-dev --limit 15` (cached runs omit `--no-cache`).

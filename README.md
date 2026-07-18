@@ -1,16 +1,39 @@
 # Scout
 
-Scout is a policy-enforced, agent-agnostic local tool for finding open-source contribution candidates. Any AI agent harness (Cursor, Claude Code, Gemini, Antigravity, Codex, and others) can orchestrate Scout via runbooks and CLI artifacts.
+Scout is a policy-enforced, agent-agnostic local tool for finding paid open-source bounty candidates and handing off to coding agents. Any AI agent harness (Cursor, Claude Code, Gemini, Antigravity, Codex, and others) can orchestrate Scout via runbooks and CLI artifacts.
 
 Policy gates **Scout CLI operations** (allowed/denied commands per runbook role). Agent harnesses must follow runbooks; Scout does not enforce policy inside external coding agents.
 
-**Current release: 0.4.1** — report/session JSON Schemas, doc polish, contributor guide.
+**Current release: 0.6.2** — income ops pack (claims stats, act-top1, scorecard, rich webhooks) + lean platform-first cash-in yield.
 
 ## Prerequisites
 
 - **Node.js 20+**
 - **GitHub token**: copy `.env.example` to `.env` and set `GITHUB_TOKEN` (or `GH_TOKEN`) — required for `full` workflow preset (archive fetch)
 - **Docker** (optional): for `scout probe` only — `docker build -t scout-sandbox:latest .`
+- **Algora API key** (optional): `ALGORA_API_KEY` for platform metadata enrich on `rewarded-cash-in`
+
+## Income-first quick start
+
+Primary profile for cash-in hunts:
+
+```powershell
+npm run ci
+node src/scout/cli.js workflow run --profile rewarded-cash-in --workflow-preset full --out-dir scout_session
+```
+
+Daily monitor + weekly benchmark + scorecard:
+
+```powershell
+pwsh ./scripts/income-ops.ps1 -Mode daily
+pwsh ./scripts/income-ops.ps1 -Mode act              # dry-run top pick
+pwsh ./scripts/income-ops.ps1 -Mode act -ExecuteAct  # full workflow on top pick
+pwsh ./scripts/income-ops.ps1 -Mode scorecard
+pwsh ./scripts/income-ops.ps1 -Mode weekly
+```
+
+See [`docs/income-ops.md`](docs/income-ops.md) for claims ledger vocabulary, act-top1, and scheduler setup.  
+Architecture ADR + phase checklist: [`docs/architecture/`](docs/architecture/).
 
 ## Agent Runbooks
 
@@ -22,23 +45,9 @@ See [`src/scout/runbooks/README.md`](src/scout/runbooks/README.md) for the full 
 - [Report Review](src/scout/runbooks/report-review-runbook.md)
 - [Decision Cockpit](src/scout/runbooks/decision-cockpit-runbook.md)
 - [Monitoring](src/scout/runbooks/monitoring-runbook.md)
+- [Bounty Claim](src/scout/runbooks/bounty-claim-runbook.md)
 
 Artifact schemas: [`schemas/README.md`](schemas/README.md). Harness routing: [`AGENTS.md`](AGENTS.md) — start from `handoff_package.json`.
-
-## Quick Workflow
-
-```powershell
-npm run ci
-node src/scout/cli.js workflow run --profile beginner-python-ts --out-dir scout_session
-node src/scout/cli.js workflow resume --session scout_session
-```
-
-With `GITHUB_TOKEN` or `GH_TOKEN` set, `workflow run` defaults to **full** preset (archive-backed static inspection). Without a token, it defaults to **fast** (metadata-only handoff).
-
-```powershell
-node src/scout/cli.js workflow run --profile beginner-python-ts --out-dir scout_session --workflow-preset full --shortlist-limit 10
-node src/scout/cli.js workflow run --profile beginner-python-ts --out-dir scout_fast --workflow-preset fast
-```
 
 ## Workflow Presets
 
@@ -47,61 +56,59 @@ node src/scout/cli.js workflow run --profile beginner-python-ts --out-dir scout_
 | `fast` | `discover,cockpit,handoff` | skipped | Quick scan, monitor follow-up, no token |
 | `full` | `discover,static,cockpit,handoff` | shortlist archive fetch | Before coding-agent handoff |
 
-Session manifest (`scout_session.json`) records `workflow_preset_requested`, `workflow_preset_effective`, and `static_fetch_archives`.
+With `GITHUB_TOKEN` or `GH_TOKEN` set, `workflow run` defaults to **full** preset. Without a token, it defaults to **fast** (metadata-only handoff).
 
 ## Discovery Presets
 
 | Preset | Intent | Notes |
 | --- | --- | --- |
-| `beginner-python-ts` | beginner | seed list + `stars:<500` on queries (repos above threshold return no issues) |
+| `rewarded-cash-in` | rewarded | **Primary income profile** — GREEN-only, ROI-ranked, Algora enrich |
+| `rewarded-explore` | rewarded | YELLOW allowed when cash-in yields zero GREEN |
+| `rewarded-hunt` | rewarded | Broad hunt with strict GREEN gates |
+| `rewarded-hunt-dev` | rewarded | Fast local iteration (15-candidate cap) |
+| `rewarded-trusted-only` | rewarded | Curated seed programs only |
+| `beginner-python-ts` | beginner | Learning path — deprioritize for income |
 | `beginner-docs-only` | beginner | docs-friendly repos |
 | `beginner-small-repos` | beginner | explicit `stars:<500` filter |
-| `rewarded-typescript` | rewarded | bounty/reward queries |
-| `rewarded-verified-only` | rewarded | verified reward signals only |
-| `rewarded-trusted-only` | rewarded | trusted seed programs only, spam penalties, payout-ranked shortlist |
-| `rewarded-hunt` | rewarded | dual seed lists + bounded Algora/bounty queries, inferred rewards OK, payout-ranked |
 
-When a profile sets `repo_size_filter` (e.g. `stars:<500`), Scout applies it to trusted seed-list queries and broad label/language queries. Large repos still listed in a seed file may contribute **zero** candidates if they exceed the filter.
+When a profile sets `repo_size_filter` (e.g. `stars:<500`), Scout applies it to trusted seed-list queries and broad label/language queries.
 
 ## Performance (0.3.0+)
 
 - Disk cache: `.scout/cache/github/` with ETag support
 - Bounded concurrency: `SCOUT_GITHUB_CONCURRENCY` (default 4)
 - GraphQL batch enrichment: `SCOUT_ENRICH_MODE=auto|rest|graphql`
-- CLI: `--no-cache`, `--enrich-mode auto`
+- Search pacing: `SCOUT_SEARCH_PACE_MS`, profile `search_pace_ms` on rewarded presets
 
-Benchmark: `pwsh ./scripts/benchmark-discovery.ps1`
+Benchmark: `node scripts/benchmark-rewarded-hunt.mjs --lane nocache`
 
-## Monitor (0.3.2)
+## Monitor
 
 ```powershell
-node src/scout/cli.js monitor --profile beginner-python-ts --skip-known --notify
+node src/scout/cli.js monitor --profile rewarded-cash-in --skip-known --notify
 pwsh ./scripts/monitor.ps1
 ```
 
-Exit code **1** when new or improved candidates appear (for schedulers). `--notify` prints a stdout hook line for schedulers; wrap with your own webhook if needed (see monitoring runbook).
+Exit code **1** when new or improved candidates appear (for schedulers).
 
 ## Use Scout Efficiently
 
-1. Start with small `--max-candidates` (15–20)
-2. Use `workflow run` (token → full preset) before any coding-agent session
-3. Read `handoff_package.json` and check `handoff_mode` (`metadata_only` vs `static_verified`) and `handoff_mode_reason` when metadata-only
-4. Schedule weekly `monitor --skip-known` instead of full rediscovery
+1. Run `rewarded-cash-in` with `full` preset before any coding-agent session
+2. Read `handoff_package.json` and verify payout on platform manually
+3. Track claims with `scout claims add/update`
+4. Schedule daily monitor + weekly benchmark via `scripts/income-ops.ps1`
 
 ## CI
-
-Canonical local verification:
 
 ```powershell
 npm run ci
 ```
 
-GitHub Actions (self-hosted only — no cloud runner minutes):
-
-- [`.github/workflows/ci-selfhosted.yml`](.github/workflows/ci-selfhosted.yml) — local Windows runner (`self-hosted`, `windows`), runs `scripts/ci.ps1`
+GitHub Actions (self-hosted only): [`.github/workflows/ci-selfhosted.yml`](.github/workflows/ci-selfhosted.yml)
 
 See [`CONTRIBUTING.md`](CONTRIBUTING.md) for branch/PR and runner setup.
 
 ## Deferred
 
-- OpenClaw/Slack native monitor notifications (webhook wrapper documented in monitoring runbook)
+- OpenClaw/Slack native monitor notifications (webhook wrapper in monitoring runbook)
+- Native `SCOUT_WEBHOOK_URL` consumption in Scout CLI

@@ -3,7 +3,7 @@
 $ErrorActionPreference = "Stop"
 Set-Location (Split-Path $PSScriptRoot -Parent)
 
-$Profile = if ($env:SCOUT_MONITOR_PROFILE) { $env:SCOUT_MONITOR_PROFILE } else { "beginner-python-ts" }
+$Profile = if ($env:SCOUT_MONITOR_PROFILE) { $env:SCOUT_MONITOR_PROFILE } else { "rewarded-cash-in" }
 
 Write-Host "==> scout monitor --profile $Profile --skip-known --notify"
 node src/scout/cli.js monitor --profile $Profile --skip-known --notify --out scout_watch_report.md --json-out scout_watch_report.json

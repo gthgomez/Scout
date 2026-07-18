@@ -7,6 +7,7 @@ import {
   computeRoiScore,
   computeRoiScoreInferred,
   computeStackFitScore,
+  isStaleClaimOpportunity,
 } from "../roi-ranking.js";
 
 const NOW = new Date("2026-06-04T00:00:00.000Z");
@@ -45,6 +46,7 @@ describe("roi ranking heuristics", () => {
         has_verified_reward_signal: true,
         assignees: [],
         latest_maintainer_activity_at: "2026-06-01T00:00:00.000Z",
+        comment_count: 2,
         discovered_by_query: "repo:acme/tooling is:issue state:open no:assignee",
       },
       { now: NOW },
@@ -57,8 +59,34 @@ describe("roi ranking heuristics", () => {
       { now: NOW },
     );
 
-    assert.equal(easy, 75);
+    assert.equal(easy, 85);
     assert.equal(hard, 0);
+  });
+
+  it("boosts stale claimed issues with low open-pr competition", () => {
+    const stale = computeClaimFrictionScore(
+      {
+        assignees: ["hunter"],
+        has_attempt_comment: true,
+        last_comment_at: "2026-05-01T00:00:00.000Z",
+        linked_prs: [],
+        comment_count: 2,
+        source_observations: [{ kind: "trusted_seed_list", value: "rewarded-programs", repo: "acme/app" }],
+      },
+      { now: NOW, staleClaimDays: 14 },
+    );
+    assert.equal(stale, 35);
+    assert.equal(
+      isStaleClaimOpportunity(
+        {
+          assignees: ["hunter"],
+          last_comment_at: "2026-05-01T00:00:00.000Z",
+          linked_prs: [],
+        },
+        { now: NOW, staleClaimDays: 14 },
+      ),
+      true,
+    );
   });
 
   it("scores stack fit from preferred and excluded languages", () => {

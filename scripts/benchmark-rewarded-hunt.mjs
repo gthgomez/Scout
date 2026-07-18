@@ -82,6 +82,14 @@ function summarizeReport(report, queryCount, broadQueryCount) {
   const discoveredQueries = [...new Set(candidates.map((c) => c.discovered_by_query).filter(Boolean))];
   const includeQueries = report.profile?.include_queries ?? [];
   const broadExpected = broadQueryCount ?? includeQueries.length;
+  const queryStats = report.discovery_query_stats ?? [];
+  const seedQueriesWithHits = queryStats.filter(
+    (stat) =>
+      (stat.kind === "trusted_seed_list" || stat.kind === "trusted_seed_body") && (stat.items_returned ?? 0) > 0,
+  ).length;
+  const platformQueriesWithHits = queryStats.filter(
+    (stat) => stat.kind === "broad" && (stat.items_returned ?? 0) > 0 && /algora|issuehunt|opire\.dev|in:title/i.test(stat.query ?? ""),
+  ).length;
 
   const greenDecisions = decisions.filter((d) => d.verdict === "GREEN");
   const spamFarmGreen = greenDecisions.filter((d) => {
@@ -93,7 +101,9 @@ function summarizeReport(report, queryCount, broadQueryCount) {
   const greenFromTrustedOrPlatform = greenDecisions.filter((d) => {
     const c = candidateById.get(d.candidate_id);
     if (!c) return false;
-    const trusted = (c.source_observations ?? []).some((o) => o.kind === "trusted_seed_list");
+    const trusted = (c.source_observations ?? []).some(
+      (o) => o.kind === "trusted_seed_list" || o.kind === "trusted_seed_body",
+    );
     const platform = (c.reward_signals ?? []).some((s) => s.kind === "platform_url");
     return trusted || platform;
   }).length;
@@ -127,6 +137,8 @@ function summarizeReport(report, queryCount, broadQueryCount) {
     spam_farm_green_count: spamFarmGreen,
     green_from_trusted_or_platform_count: greenFromTrustedOrPlatform,
     green_from_trusted_or_platform_pct: greenFromTrustedOrPlatformPct,
+    seed_queries_with_hits: seedQueriesWithHits,
+    platform_queries_with_hits: platformQueriesWithHits,
   };
 }
 
@@ -189,6 +201,8 @@ const benchmark = {
     broad_queries_executed_pct: 1,
     max_spam_farm_green: 0,
     min_green_from_trusted_or_platform_pct: 0.8,
+    min_seed_queries_with_hits: 2,
+    min_platform_query_hits: 1,
   },
   lanes: lanes.map((lane) => ({
     name: lane.name,

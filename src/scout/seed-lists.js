@@ -103,18 +103,35 @@ export function normalizeSeedRepo(entry, fieldName = "repo") {
       fieldName: `${fieldName}.search_query`,
     });
   }
+  if (entry.search_queries !== undefined) {
+    if (!Array.isArray(entry.search_queries)) {
+      throw new Error(`Trusted seed-list ${fieldName}.search_queries must be an array.`);
+    }
+    normalized.search_queries = entry.search_queries.map((query, index) =>
+      validateSearchQuery(query, {
+        repo,
+        fieldName: `${fieldName}.search_queries[${index}]`,
+      }),
+    );
+  }
+  if (normalized.search_query && normalized.search_queries) {
+    throw new Error(`Trusted seed-list ${fieldName} cannot define both search_query and search_queries.`);
+  }
   return normalized;
 }
 
 /**
- * When a seed repo defines search_query, return that override query.
+ * When a seed repo defines search_queries or search_query, return those override queries.
  * Otherwise return null so callers apply default repo-scoped query logic.
  */
 export function queriesForSeedRepo(seedRepo) {
-  if (!seedRepo?.search_query) {
-    return null;
+  if (seedRepo?.search_queries?.length) {
+    return [...seedRepo.search_queries];
   }
-  return [seedRepo.search_query];
+  if (seedRepo?.search_query) {
+    return [seedRepo.search_query];
+  }
+  return null;
 }
 
 export function validateSearchQuery(query, options = {}) {

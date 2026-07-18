@@ -17,7 +17,15 @@ const STAR_FOLLOW_BOUNTY_PATTERN = /\bstar\s*&\s*follow\b/i;
 const RTC_FARM_TITLE_PATTERN = /\b\d+\s*RTC\b/i;
 
 export function isFromTrustedSeedList(candidate) {
-  return (candidate?.source_observations ?? []).some((observation) => observation.kind === "trusted_seed_list");
+  return (candidate?.source_observations ?? []).some((observation) =>
+    observation.kind === "trusted_seed_list" || observation.kind === "trusted_seed_body",
+  );
+}
+
+function hasObservedPlatformUrl(candidate) {
+  return (candidate?.reward_signals ?? []).some(
+    (signal) => signal.kind === "platform_url" && signal.confidence === "OBSERVED",
+  );
 }
 
 export function detectBountySpamSignals(candidate) {
@@ -25,8 +33,9 @@ export function detectBountySpamSignals(candidate) {
   const repoFull = `${candidate?.repo_owner ?? ""}/${candidate?.repo_name ?? ""}`.toLowerCase();
   const repoName = String(candidate?.repo_name ?? "").toLowerCase();
   const title = String(candidate?.issue_title ?? "");
+  const platformUrlObserved = hasObservedPlatformUrl(candidate);
 
-  if (SPAM_TITLE_PATTERN.test(title)) {
+  if (SPAM_TITLE_PATTERN.test(title) && !platformUrlObserved) {
     signals.push({
       kind: "title_template",
       confidence: "high",
@@ -71,6 +80,7 @@ export function detectBountySpamSignals(candidate) {
 
   if (
     SPAM_TITLE_PATTERN.test(title) &&
+    !platformUrlObserved &&
     !candidate?.latest_maintainer_activity_at &&
     !isFromTrustedSeedList(candidate)
   ) {

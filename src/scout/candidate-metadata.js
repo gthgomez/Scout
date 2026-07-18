@@ -13,14 +13,49 @@ export function applyRepositoryMetadata(candidate, repository) {
   };
 }
 
+function commentListFromIssue(issue) {
+  if (Array.isArray(issue.comments)) {
+    return issue.comments;
+  }
+  return issue.comments?.nodes ?? [];
+}
+
+function latestCommentAt(comments) {
+  let latest = null;
+  for (const comment of comments) {
+    const at = comment.updatedAt ?? comment.updated_at ?? comment.created_at ?? comment.createdAt;
+    if (!at) {
+      continue;
+    }
+    if (!latest || new Date(at) > new Date(latest)) {
+      latest = at;
+    }
+  }
+  return latest;
+}
+
 export function applyIssueMetadata(candidate, issue) {
+  const comments = commentListFromIssue(issue);
   const linkedPrs = issue.linked_prs ?? issue.timelineItems?.nodes?.filter((node) => node.pullRequest).map((node) => node.pullRequest) ?? [];
-  const maintainerComment = latestMaintainerComment(issue.comments?.nodes ?? issue.comments ?? []);
+  const normalizedLinkedPrs = linkedPrs.map(normalizeLinkedPr);
+  const maintainerComment = latestMaintainerComment(comments);
+  const commentCount =
+    typeof issue.comments_count === "number"
+      ? issue.comments_count
+      : typeof issue.comments === "number"
+        ? issue.comments
+        : comments.length;
   return {
     ...candidate,
+    comment_count: commentCount,
+    last_comment_at: latestCommentAt(comments) ?? candidate.last_comment_at ?? null,
     latest_maintainer_activity_at: maintainerComment?.updatedAt ?? maintainerComment?.updated_at ?? candidate.latest_maintainer_activity_at,
-    linked_prs: linkedPrs.map(normalizeLinkedPr),
-    claimed_in_comments: issueAppearsClaimed(issue.comments?.nodes ?? issue.comments ?? []),
+    linked_prs: normalizedLinkedPrs,
+    has_open_linked_pr: normalizedLinkedPrs.some(
+      (pr) => !pr.merged && String(pr.state ?? "").toLowerCase() === "open",
+    ),
+    has_attempt_comment: comments.some((comment) => /\/attempt\b/i.test(String(comment.body ?? ""))),
+    claimed_in_comments: issueAppearsClaimed(comments),
     collection_status: candidate.collection_status === "FAILED" ? "PARTIAL" : "OBSERVED",
   };
 }

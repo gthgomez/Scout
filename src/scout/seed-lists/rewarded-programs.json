@@ -10,9 +10,6 @@
     { "repo": "n8n-io/n8n" },
     { "repo": "medusajs/medusa" },
     { "repo": "payloadcms/payload" },
-    { "repo": "directus/directus" },
-    { "repo": "formbricks/formbricks" },
-    { "repo": "hoppscotch/hoppscotch" },
-    { "repo": "dubinc/dub" }
+    { "repo": "formbricks/formbricks" }
   ]
 }

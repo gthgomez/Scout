@@ -99,15 +99,22 @@ Create or update `.scout/claims/ledger.json`:
 
 Statuses: `researching` → `claimed` → `pr_open` → `merged` → `paid` | `abandoned`
 
+Aliases: `in_progress`/`working` → `claimed`; `submitted`/`pr` → `pr_open`; `done` → `paid`; `dropped` → `abandoned`.
+
 ### CLI commands
 
 ```powershell
 scout claims list
-scout claims add --issue-url https://github.com/org/repo/issues/42 --candidate-id SCOUT-org-repo-42 --status claimed --platform-claim-url https://algora.io/bounties/example
+scout claims stats
+scout claims add --issue-url https://github.com/org/repo/issues/42 --candidate-id SCOUT-org-repo-42 --status researching
+scout claims update --issue-url https://github.com/org/repo/issues/42 --status claimed --platform-claim-url https://algora.io/bounties/example
 scout claims update --issue-url https://github.com/org/repo/issues/42 --status pr_open --pr-url https://github.com/org/repo/pull/99
+scout claims update --issue-url https://github.com/org/repo/issues/42 --status paid --amount-usd 150
 ```
 
 `scout monitor` always loads the ledger and skips issues with status `claimed`, `pr_open`, `merged`, or `paid`. With `--skip-known`, monitor snapshot keys are merged into the same skip set.
+
+Income scorecard: `node scripts/income-scorecard.mjs` or `pwsh ./scripts/income-ops.ps1 -Mode scorecard`.
 
 Feed ledger into `scout monitor --skip-known` to avoid re-recommending active work.
 

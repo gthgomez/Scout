@@ -1,6 +1,12 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
+/**
+ * Canonical claim lifecycle (income funnel):
+ * researching → claimed → pr_open → merged → paid | abandoned
+ *
+ * Aliases accepted on CLI/input: in_progress→claimed, submitted→pr_open, working→claimed
+ */
 export const CLAIM_STATUSES = Object.freeze([
   "researching",
   "claimed",
@@ -10,7 +16,18 @@ export const CLAIM_STATUSES = Object.freeze([
   "abandoned",
 ]);
 
+/** Statuses that should be skipped by monitor --skip-known / discovery. */
 export const ACTIVE_CLAIM_STATUSES = Object.freeze(["claimed", "pr_open", "merged", "paid"]);
+
+/** Human-friendly aliases → canonical status. */
+export const CLAIM_STATUS_ALIASES = Object.freeze({
+  in_progress: "claimed",
+  working: "claimed",
+  submitted: "pr_open",
+  pr: "pr_open",
+  done: "paid",
+  dropped: "abandoned",
+});
 
 export function claimsLedgerDir(root = process.cwd()) {
   return join(root, ".scout", "claims");
@@ -22,6 +39,25 @@ export function claimsLedgerPath(root = process.cwd()) {
 
 export function emptyClaimsLedger() {
   return { claims: [] };
+}
+
+/**
+ * Normalize status input (canonical or alias) to a CLAIM_STATUSES value.
+ * @param {string} status
+ * @returns {string}
+ */
+export function normalizeClaimStatus(status) {
+  if (typeof status !== "string" || status.trim().length === 0) {
+    throw new Error(`claim.status must be one of: ${CLAIM_STATUSES.join(", ")}`);
+  }
+  const raw = status.trim().toLowerCase();
+  const canonical = CLAIM_STATUS_ALIASES[raw] ?? raw;
+  if (!CLAIM_STATUSES.includes(canonical)) {
+    throw new Error(
+      `claim.status must be one of: ${CLAIM_STATUSES.join(", ")} (aliases: ${Object.keys(CLAIM_STATUS_ALIASES).join(", ")})`,
+    );
+  }
+  return canonical;
 }
 
 export function issueKeyFromClaim(claim) {
@@ -65,23 +101,36 @@ function assertClaimRecord(claim) {
   if (typeof claim.issue_url !== "string" || claim.issue_url.length === 0) {
     throw new Error("claim.issue_url must be a non-empty string");
   }
-  if (!CLAIM_STATUSES.includes(claim.status)) {
-    throw new Error(`claim.status must be one of: ${CLAIM_STATUSES.join(", ")}`);
+  normalizeClaimStatus(claim.status);
+}
+
+function normalizeOptionalAmount(value) {
+  if (value === undefined || value === null || value === "") {
+    return null;
   }
+  const num = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(num) || num < 0) {
+    throw new Error("claim.amount_usd must be a non-negative number when set");
+  }
+  return num;
 }
 
 function normalizeClaim(claim) {
   assertClaimRecord(claim);
   const now = new Date().toISOString();
+  const status = normalizeClaimStatus(claim.status);
+  const amountUsd = normalizeOptionalAmount(claim.amount_usd);
   return {
     issue_url: claim.issue_url,
     candidate_id: claim.candidate_id ?? null,
-    status: claim.status,
+    status,
     platform_claim_url: claim.platform_claim_url ?? null,
     pr_url: claim.pr_url ?? null,
     claimed_at: claim.claimed_at ?? now,
-    paid_at: claim.paid_at ?? null,
-    notes: claim.notes ?? "",
+    paid_at: claim.paid_at ?? (status === "paid" ? now : null),
+    amount_usd: amountUsd,
+    amount_currency: claim.amount_currency ?? (amountUsd != null ? "USD" : null),
+    notes: claim.notes ?? claim.note ?? "",
     issue_key: issueKeyFromClaim(claim),
   };
 }
@@ -134,4 +183,41 @@ export function upsertClaim(ledger, claim) {
     next.claims[index] = { ...next.claims[index], ...normalized };
   }
   return next;
+}
+
+/**
+ * Funnel scorecard from the local claims ledger (income KPIs).
+ * @param {{ claims?: object[] }} ledger
+ * @returns {object}
+ */
+export function summarizeClaimsLedger(ledger) {
+  const claims = ledger?.claims ?? [];
+  const byStatus = Object.fromEntries(CLAIM_STATUSES.map((status) => [status, 0]));
+  let paidUsd = 0;
+  let paidCount = 0;
+  let inFlight = 0;
+  for (const claim of claims) {
+    const status = claim.status;
+    if (byStatus[status] !== undefined) {
+      byStatus[status] += 1;
+    }
+    if (status === "paid") {
+      paidCount += 1;
+      if (typeof claim.amount_usd === "number") {
+        paidUsd += claim.amount_usd;
+      }
+    }
+    if (["researching", "claimed", "pr_open", "merged"].includes(status)) {
+      inFlight += 1;
+    }
+  }
+  return {
+    generated_at: new Date().toISOString(),
+    total_claims: claims.length,
+    by_status: byStatus,
+    in_flight: inFlight,
+    paid_count: paidCount,
+    paid_usd_sum: paidUsd,
+    active_skip_keys: claimIssueKeys(ledger).size,
+  };
 }

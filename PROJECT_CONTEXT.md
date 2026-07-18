@@ -2,24 +2,28 @@
 
 ## What Scout Is
 
-Scout is a policy-enforced backend for finding open-source contribution candidates. It is orchestrated by AI agent harnesses through runbooks and CLI artifacts — not tied to a single vendor runtime.
+Scout is a policy-enforced backend for finding open-source contribution and **paid bounty** candidates. It is orchestrated by AI agent harnesses through runbooks and CLI artifacts — not tied to a single vendor runtime.
 
 Policy gates **Scout CLI operations** only; harnesses must follow runbooks for allowed/denied actions outside Scout.
 
-Current release: **0.4.7** on `main`.
+Current release: **0.6.2** on `main`.
 
 ## Discovery Intents
 
 | Intent | Mission | Presets |
 | --- | --- | --- |
 | `beginner` | Learning-focused contributions | `beginner-python-ts`, `beginner-docs-only`, `beginner-small-repos` |
-| `rewarded` | Bounty/reward metadata hunts | `rewarded-typescript`, `rewarded-verified-only`, `rewarded-trusted-only`, `rewarded-hunt` |
+| `rewarded` | Bounty/reward cash-in hunts | `rewarded-cash-in`, `rewarded-explore`, `rewarded-hunt`, `rewarded-hunt-dev`, `rewarded-trusted-only` |
+
+**Income-first default:** `rewarded-cash-in` (GREEN-only, ROI-ranked, Algora enrich).
 
 ## Environment
 
 | Variable | Purpose |
 | --- | --- |
 | `GITHUB_TOKEN` / `GH_TOKEN` | GitHub API access; enables default `full` workflow preset |
+| `ALGORA_API_KEY` / `SCOUT_ALGORA_API_KEY` | Optional Algora API metadata enrich (falls back to public page scrape) |
+| `ALGORA_API_BASE_URL` | Algora API base URL override (default `https://api.algora.io`) |
 | `SCOUT_SANDBOX_IMAGE` | Docker probe image override |
 | `SCOUT_GITHUB_CONCURRENCY` | Enrichment parallelism (default 4) |
 | `SCOUT_ENRICH_MODE` | `auto`, `rest`, or `graphql` |
@@ -28,9 +32,9 @@ Current release: **0.4.7** on `main`.
 | `SCOUT_SEARCH_PACE_MS` | Minimum delay between GitHub search API calls (default 4000) |
 | `SCOUT_SEARCH_MAX_RETRIES` | Retries per search query on secondary rate limit (default 3) |
 | `SCOUT_SEARCH_SECONDARY_COOLDOWN_MS` | Session cooldown after secondary rate-limit hit (default 60000, cap 120s) |
-| Profile `prefetch_contributing` | Fetch CONTRIBUTING.md per repo during rewarded discovery (on `rewarded-hunt`) |
+| Profile `prefetch_contributing` | Fetch CONTRIBUTING.md per repo during rewarded discovery |
 | Profile `search_pace_ms` / `search_max_retries` / `search_secondary_cooldown_ms` | Override env search pacing and cooldown for a profile run |
-| `SCOUT_WEBHOOK_URL` | Optional user-owned webhook for monitor wrapper (not read by Scout CLI) |
+| `SCOUT_WEBHOOK_URL` | Optional user-owned webhook for income-ops/monitor wrapper (not read by Scout CLI) |
 
 ## Workflow Presets
 
@@ -39,60 +43,40 @@ Current release: **0.4.7** on `main`.
 | `fast` | discover → cockpit → handoff | No GitHub token |
 | `full` | discover → static (archive) → cockpit → handoff | `GITHUB_TOKEN` or `GH_TOKEN` present |
 
-CLI: `--workflow-preset fast|full`, `--fetch-archives`, `--static-limit N` (defaults to `--shortlist-limit`).
-
 ## Agent Artifact Contract
 
 `scout workflow run` writes a session bundle including:
 
-- `scout_session.json` — manifest (`stages_completed`, `workflow_preset_requested`, `workflow_preset_effective`, `static_fetch_archives`, `artifacts`)
-- `scout_report.json` / `scout_report.md` — validated by `validateReportModel` on creation
-- `scout_static_report.json` / `.md` when static stage runs with archive fetch
+- `scout_session.json` — manifest
+- `scout_report.json` / `scout_report.md`
+- `scout_static_report.json` / `.md` when static stage runs
 - `scout_cockpit.json` / `.md` when cockpit stage runs
-- `handoff_package.json` — schema 1.1 primary agent entrypoint (`handoff_mode`, `handoff_mode_reason`, `recommended_packages`)
-- `agent_summary.md` — human/agent-readable session summary
-- `scout_shortlist.md`, `next_actions.json`
+- `handoff_package.json` — schema 1.1/1.2 primary agent entrypoint
+- `agent_summary.md`, `scout_shortlist.md`, `next_actions.json`
 
-JSON Schemas: [`schemas/README.md`](schemas/README.md) — handoff 1.1, report 1.0, session 1.0.
-
-See [`AGENTS.md`](AGENTS.md) for harness routing.
+JSON Schemas: [`schemas/README.md`](schemas/README.md).
 
 ## CLI Surface
 
 | Command | Role |
 | --- | --- |
-| `scout workflow run [--workflow-preset fast\|full]` | Multi-stage pipeline with token-aware default |
+| `scout workflow run [--workflow-preset fast\|full]` | Multi-stage pipeline |
 | `scout workflow resume --session <dir>` | Continue incomplete session |
-| `scout discover` / `profile run` | Discovery with `--no-cache`, `--enrich-mode` |
-| `scout inspect` | Static inspection (`--fetch-archives`, `--candidate-id`) |
+| `scout discover` / `profile run` | Discovery |
 | `scout monitor --skip-known --notify` | Incremental watch (exit 1 on actionable events) |
-| `scout validate-report` | Report schema and decision coverage |
-| `scout explain` | Verdict reasoning for one candidate |
-| `scout export-shortlist` | Markdown shortlist export |
-| `scout cockpit` | Decision cockpit JSON/markdown |
-| `scout handoff` | Regenerate `handoff_package.json` from report |
+| `scout claims list\|add\|update` | Local bounty claim ledger |
+| `scout cockpit` / `scout handoff` | Decision drill-down and handoff export |
 | `scout probe` | Approval-bound Docker probes |
-| `scout plan` | Network design / install dry-run planning |
-| `scout profile create\|run` | Search profile management |
-| `scout run --safe` | Metadata-only quick report |
 
-## Repository Layout (0.4.x)
+## Income Ops
 
-| Path | Role |
-| --- | --- |
-| `src/scout/github-client.js` | HTTP/GraphQL transport, cache, concurrency |
-| `src/scout/github-cache.js` | Disk cache |
-| `src/scout/github-graphql.js` | Batch GraphQL enrichment |
-| `src/scout/candidate-metadata.js` | Shared metadata/reward helpers |
-| `src/scout/async-pool.js` | Bounded concurrency pool |
-| `src/scout/workflow.js` | Pipeline stage orchestration |
-| `src/scout/session.js` | Session manifest helpers |
-| `schemas/` | JSON Schema contracts + index |
-| `scripts/benchmark-discovery.ps1` | Discovery mode benchmark |
-| `scripts/monitor.ps1` | Scheduled monitor example |
-| `AGENTS.md` | Harness routing |
-| `CONTRIBUTING.md` | Contributor and CI setup |
-| `.github/workflows/ci-selfhosted.yml` | Self-hosted Windows CI |
+- Daily: `pwsh ./scripts/income-ops.ps1 -Mode daily` (monitor + rich webhook + act-top1 dry-run)
+- Act: `pwsh ./scripts/income-ops.ps1 -Mode act` / `-ExecuteAct` for full workflow
+- Scorecard: `pwsh ./scripts/income-ops.ps1 -Mode scorecard`
+- Weekly: `pwsh ./scripts/income-ops.ps1 -Mode weekly` (bench + seed audit + scorecard)
+- Claims: `scout claims list|add|update|stats` — statuses `researching→claimed→pr_open→merged→paid|abandoned`
+- Docs: [`docs/income-ops.md`](docs/income-ops.md)
+- Architecture ADR + phase checklist: [`docs/architecture/`](docs/architecture/)
 
 ## Verification
 
@@ -100,8 +84,8 @@ See [`AGENTS.md`](AGENTS.md) for harness routing.
 npm run ci
 ```
 
-Includes `test:policy`. GitHub Actions CI runs on the self-hosted Windows runner only.
-
 ## Open Gaps
 
-- OpenClaw/Slack native monitor notifications (deferred; webhook wrapper in monitoring runbook)
+- Native webhook in Scout CLI (wrapper documented; ops wrapper uses `SCOUT_WEBHOOK_URL`)
+- Security vuln bounty — separate sibling project (`ScopeHound` spike under `Project_AI/`)
+- Income funnel Phase 0 operator gates (schedule + first paid) — see [`docs/architecture/INCOME_FUNNEL_PHASE_CHECKLIST.md`](docs/architecture/INCOME_FUNNEL_PHASE_CHECKLIST.md)

@@ -14,4 +14,6 @@ Benchmark artifact: [`.scout/benchmark-rewarded-hunt.json`](../.scout/benchmark-
 
 Run benchmark: `node scripts/benchmark-rewarded-hunt.mjs`
 
-Claim workflow runbook: [`src/scout/runbooks/bounty-claim-runbook.md`](../src/scout/runbooks/bounty-claim-runbook.md)
+Claim workflow runbook: [`src/scout/runbooks/bounty-claim-runbook.md`](../../src/scout/runbooks/bounty-claim-runbook.md)
+
+**Accepted income architecture (not research):** [`docs/architecture/income-funnel.md`](../architecture/income-funnel.md) + [phase checklist](../architecture/INCOME_FUNNEL_PHASE_CHECKLIST.md).

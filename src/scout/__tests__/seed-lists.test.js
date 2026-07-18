@@ -81,15 +81,20 @@ describe("trusted seed lists", () => {
     }
   });
 
-  it("loads rewarded-programs-algora packaged seed list with 6 repos", async () => {
+  it("loads rewarded-programs-algora packaged seed list with lean cash-in repos", async () => {
     const seedList = await loadTrustedSeedList("rewarded-programs-algora");
 
     assert.equal(seedList.seed_list_id, "rewarded-programs-algora");
     assert.equal(seedList.name, "Algora-active OSS programs");
-    assert.equal(seedList.repos.length, 6);
+    assert.equal(seedList.repos.length, 7);
     assert.ok(seedList.repos.some((entry) => entry.repo === "twentyhq/twenty"));
-    assert.ok(seedList.repos.some((entry) => entry.repo === "PostHog/posthog"));
+    assert.ok(seedList.repos.some((entry) => entry.repo === "langfuse/langfuse"));
     assert.ok(seedList.repos.some((entry) => entry.repo === "golemcloud/golem"));
+    // Pruned from cash-in budget / secondary rate-limit heavy hosts
+    assert.equal(
+      seedList.repos.some((entry) => entry.repo === "PostHog/posthog"),
+      false,
+    );
   });
 
   it("rewarded-programs-algora has no overlap with rewarded-programs", async () => {
@@ -105,12 +110,16 @@ describe("trusted seed lists", () => {
     assert.deepEqual(overlap, []);
   });
 
-  it("loads rewarded-programs-algora without formance (422-prone seed removed)", async () => {
+  it("loads rewarded-programs-algora without 422-prone seeds (formance, unkey)", async () => {
     const seedList = await loadTrustedSeedList("rewarded-programs-algora");
 
-    assert.equal(seedList.repos.length, 6);
+    assert.equal(seedList.repos.length, 7);
     assert.equal(
       seedList.repos.some((entry) => entry.repo === "formancehq/formance"),
+      false,
+    );
+    assert.equal(
+      seedList.repos.some((entry) => entry.repo === "unkeydev/unkey"),
       false,
     );
   });

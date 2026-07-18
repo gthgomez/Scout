@@ -1,4 +1,5 @@
 import { assertAllowed } from "./policy.js";
+import { fetchAlgoraApiMetadata } from "./algora-api-enrich.js";
 
 const ALGORA_HOST_PATTERN = /\balgora\.io\b/i;
 
@@ -37,6 +38,7 @@ export async function applyAlgoraPlatformEnrich({
   policy,
   fetchImpl = globalThis.fetch,
   auditLog = null,
+  preferApi = true,
 }) {
   if (!candidate) {
     return candidate;
@@ -58,17 +60,38 @@ export async function applyAlgoraPlatformEnrich({
   }
 
   try {
-    const response = await fetchImpl(url, {
-      headers: {
-        Accept: "text/html,application/json",
-        "User-Agent": "Scout/0.6.0 (read-only bounty metadata)",
-      },
-    });
-    if (!response.ok) {
-      return candidate;
+    let parsed = null;
+    let sourceRef = url;
+    let sourceKind = "algora_public_page";
+
+    if (preferApi) {
+      const apiResult = await fetchAlgoraApiMetadata({ url, fetchImpl });
+      if (apiResult) {
+        parsed = apiResult;
+        sourceRef = apiResult.source_ref ?? url;
+        sourceKind = apiResult.source_kind ?? "algora_api";
+        auditLog?.record?.({
+          event_type: "ALGORA_API_ENRICH_APPLIED",
+          candidate_id: candidate.candidate_id,
+        });
+      }
     }
-    const body = await response.text();
-    const parsed = parseAlgoraPublicPage(body);
+
+    if (!parsed) {
+      const response = await fetchImpl(url, {
+        headers: {
+          Accept: "text/html,application/json",
+          "User-Agent": "Scout/0.6.1 (read-only bounty metadata)",
+        },
+      });
+      if (!response.ok) {
+        return candidate;
+      }
+      const body = await response.text();
+      parsed = parseAlgoraPublicPage(body);
+      sourceKind = "algora_public_page";
+    }
+
     if (!parsed.status && parsed.amount === null) {
       return candidate;
     }
@@ -84,8 +107,8 @@ export async function applyAlgoraPlatformEnrich({
       source_observations.push({
         kind: "platform_status",
         value: parsed.status,
-        confidence: "INFERRED",
-        source_ref: url,
+        confidence: sourceKind === "algora_api" ? "OBSERVED" : "INFERRED",
+        source_ref: sourceRef,
         platform: "algora",
       });
     }
@@ -94,9 +117,9 @@ export async function applyAlgoraPlatformEnrich({
       source_observations.push({
         kind: "platform_amount",
         value: String(parsed.amount),
-        currency: parsed.currency,
-        confidence: "INFERRED",
-        source_ref: url,
+        currency: parsed.currency ?? "USD",
+        confidence: sourceKind === "algora_api" ? "OBSERVED" : "INFERRED",
+        source_ref: sourceRef,
         platform: "algora",
       });
     }
@@ -107,6 +130,7 @@ export async function applyAlgoraPlatformEnrich({
       candidate_id: candidate.candidate_id,
       platform_status_observed: enriched.platform_status_observed ?? null,
       platform_amount_observed: enriched.platform_amount_observed ?? null,
+      source_kind: sourceKind,
     });
     return enriched;
   } catch (error) {
