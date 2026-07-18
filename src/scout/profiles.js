@@ -240,8 +240,8 @@ export function createSearchProfile({
   languages,
   labels,
   include_queries,
-  exclude_orgs = [],
-  exclude_repos = [],
+  exclude_orgs,
+  exclude_repos,
   trusted_seed_lists,
   max_candidates = 50,
   mode = "metadata_only",
@@ -291,8 +291,9 @@ export function createSearchProfile({
     include_queries: sizeFilter && !includeQueries.some((q) => String(q).includes(sizeFilter))
       ? [...includeQueries, `is:issue state:open ${sizeFilter} no:assignee`]
       : includeQueries,
-    exclude_orgs,
-    exclude_repos,
+    // Empty-array defaults would swallow preset exclude lists (spam hosts leaked into cash-in).
+    exclude_orgs: exclude_orgs ?? preset.exclude_orgs ?? [],
+    exclude_repos: exclude_repos ?? preset.exclude_repos ?? [],
     trusted_seed_lists: trusted_seed_lists ?? preset.trusted_seed_lists ?? [],
     max_candidates: max_candidates ?? preset.max_candidates ?? 50,
     mode,

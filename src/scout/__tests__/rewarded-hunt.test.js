@@ -97,6 +97,12 @@ describe("rewarded-hunt preset", () => {
     assert.ok(preset.exclude_repos.includes("unkeydev/unkey"));
   });
 
+  it("rewarded-cash-in applies preset exclude_repos (spam hosts)", () => {
+    const profile = createSearchProfile({ name: "rewarded-cash-in" });
+    assert.ok(profile.exclude_repos.includes("Scottcjn/rustchain-bounties"));
+    assert.ok(profile.exclude_repos.includes("unkeydev/unkey"));
+  });
+
   it("rewarded-cash-in stays within a lean query budget", async () => {
     const profile = createSearchProfile({ name: "rewarded-cash-in" });
     const rewardedPrograms = await loadTrustedSeedList("rewarded-programs");
