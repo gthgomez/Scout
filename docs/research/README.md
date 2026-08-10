@@ -2,13 +2,17 @@
 
 Bounty discovery audit and upgrade research (2026-06-23).
 
+Convention: every research doc carries a **Status** header marking it current/superseded/implemented.
+
 | Document | Purpose |
 |----------|---------|
 | [scout-bounty-audit-2026-06-23.md](scout-bounty-audit-2026-06-23.md) | Phase 0 baseline metrics, signal audit, gap matrix, go/no-go memo |
 | [discovery-reliability-design.md](discovery-reliability-design.md) | P0 search pacing + 403 retry design |
 | [bounty-platforms.md](bounty-platforms.md) | Algora, IssueHunt, and platform integration survey |
+| [algora-api-spike.md](algora-api-spike.md) | Algora API enrich spike — implemented 0.6.0/0.6.1 |
 | [roi-ranking-design.md](roi-ranking-design.md) | Effort/ROI ranking and skill-match profile fields |
 | [handoff-schema-research.md](handoff-schema-research.md) | Handoff package 1.2 + claim ledger research |
+| [scout-scorecard-2026-06-24.md](scout-scorecard-2026-06-24.md) | post-0.6.1 scorecard — historical |
 
 Benchmark artifact: [`.scout/benchmark-rewarded-hunt.json`](../.scout/benchmark-rewarded-hunt.json)
 

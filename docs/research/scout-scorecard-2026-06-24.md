@@ -1,5 +1,7 @@
 # Scout post-0.6.1 scorecard — 2026-06-24
 
+> **Status:** Historical scorecard (post-0.6.1) — current operations documented in docs/income-ops.md and docs/architecture/INCOME_FUNNEL_PHASE_CHECKLIST.md.
+
 Live audit after plan implementation (income-first track).
 
 ## CI / tests

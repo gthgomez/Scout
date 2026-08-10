@@ -32,16 +32,15 @@ Find and shortlist contribution candidates using GitHub metadata only, then hand
 Subcommand help: `scout workflow --help`, `scout plan --help`, `scout probe --help`. Top-level: `scout --help`.
 
 - `scout workflow run --profile <profile-id> --out-dir <dir> [--workflow-preset fast|full] [--through discover,static,cockpit,handoff] [--shortlist-limit N] [--static-limit N] [--fetch-archives]`
-  - preferred agent-facing entrypoint; writes session manifest, reports, handoff schema 1.1
+  - preferred agent-facing entrypoint; writes session manifest and reports; handoff is schema 1.1 for beginner discovery and schema 1.2 (claim fields) for rewarded discovery — see decision-cockpit-runbook.md and schemas/README.md
   - **fast** preset: `discover,cockpit,handoff` (metadata-only handoff)
   - **full** preset: `discover,static,cockpit,handoff` (shortlist archive fetch; requires `GITHUB_TOKEN` or `GH_TOKEN`)
   - default preset: `full` when token present, else `fast`
 - `scout workflow resume --session <dir>`
 - `scout profile create beginner-python-ts --intent beginner`
-- `scout profile create rewarded-typescript --intent rewarded --trusted-seed-lists rewarded-programs`
+- `scout profile create my-rewarded --intent rewarded --trusted-seed-lists rewarded-programs-algora`
 - `scout profile run rewarded-trusted-only --limit 30` — curated OSS bounty programs only
 - `scout profile run rewarded-hunt --limit 30` — dual seed lists plus bounded Algora/bounty broad queries; inferred rewards OK
-- `scout run --safe --limit <n> --out <path>`
 - `scout discover --limit <n> --out <path> --json-out <json-path>`
 - `scout profile run <profile-id> --out <path> --json-out <json-path>`
 - `scout validate-report --report <report-path>`

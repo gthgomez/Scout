@@ -1,0 +1,341 @@
+<title>Scout documentation audit — docs vs code state</title>
+<style>
+  :root {
+    --bg: #F5F7F9;
+    --bg-soft: #EDF1F4;
+    --bg-chip: #E4EAEF;
+    --ink: #1D2733;
+    --ink-2: #55626F;
+    --line: #D5DDE4;
+    --accent: #B96F00;
+    --accent-soft: #F6E8CC;
+    --ok: #2E7D4F;
+    --ok-soft: #E2EFE7;
+    --warn: #9A6400;
+    --warn-soft: #F6EAD2;
+    --crit: #B23A2C;
+    --crit-soft: #F5E4E1;
+    --mono: #26323F;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #10151B;
+      --bg-soft: #161D25;
+      --bg-chip: #1D2630;
+      --ink: #E3E9EF;
+      --ink-2: #93A1AF;
+      --line: #263240;
+      --accent: #F0A93C;
+      --accent-soft: #2E2515;
+      --ok: #4CAF7D;
+      --ok-soft: #172821;
+      --warn: #E0A33C;
+      --warn-soft: #2E2515;
+      --crit: #E0735F;
+      --crit-soft: #2E1C19;
+      --mono: #C7D2DC;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #10151B;
+    --bg-soft: #161D25;
+    --bg-chip: #1D2630;
+    --ink: #E3E9EF;
+    --ink-2: #93A1AF;
+    --line: #263240;
+    --accent: #F0A93C;
+    --accent-soft: #2E2515;
+    --ok: #4CAF7D;
+    --ok-soft: #172821;
+    --warn: #E0A33C;
+    --warn-soft: #2E2515;
+    --crit: #E0735F;
+    --crit-soft: #2E1C19;
+    --mono: #C7D2DC;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size: 16px;
+    line-height: 1.62;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 56px 28px 96px; }
+  .mono, code, .fname, th, .eyebrow, .chip, .meta, .sec h2, .verdict-word { font-family: ui-monospace, "Cascadia Mono", "SF Mono", Consolas, monospace; }
+
+  /* header */
+  .eyebrow {
+    font-size: 12px; letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--accent); font-weight: 700;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .eyebrow::before { content: ""; width: 26px; height: 2px; background: var(--accent); display: inline-block; }
+  h1 {
+    font-family: ui-monospace, "Cascadia Mono", "SF Mono", Consolas, monospace;
+    font-size: clamp(30px, 4.6vw, 44px);
+    line-height: 1.12; letter-spacing: -0.015em;
+    margin: 18px 0 10px; text-wrap: balance;
+  }
+  .sub { color: var(--ink-2); font-size: 17px; max-width: 66ch; margin: 0 0 26px; }
+  .meta {
+    display: flex; flex-wrap: wrap; gap: 8px 26px;
+    font-size: 12.5px; color: var(--ink-2);
+    border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);
+    padding: 12px 0; margin-bottom: 30px;
+  }
+  .meta b { color: var(--ink); font-weight: 600; }
+  .meta .warn-tag { color: var(--warn); font-weight: 700; }
+
+  /* chips */
+  .chips { display: flex; flex-wrap: wrap; gap: 10px; margin: 0 0 8px; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-size: 13px; font-weight: 600; padding: 7px 14px;
+    border-radius: 999px; border: 1px solid var(--line);
+    background: var(--bg-chip); color: var(--ink);
+    white-space: nowrap;
+  }
+  .chip .n { font-variant-numeric: tabular-nums; color: var(--ink-2); }
+  .chip.ok   { border-color: var(--ok);   color: var(--ok);   background: var(--ok-soft); }
+  .chip.warn { border-color: var(--warn); color: var(--warn); background: var(--warn-soft); }
+  .chip.crit { border-color: var(--crit); color: var(--crit); background: var(--crit-soft); }
+  .chip.accent { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+
+  /* sections */
+  .sec { margin-top: 58px; }
+  .sec h2 {
+    font-size: 20px; font-weight: 700; letter-spacing: -0.01em;
+    margin: 0 0 6px; text-wrap: balance;
+    display: flex; align-items: baseline; gap: 14px;
+  }
+  .sec h2 .num { color: var(--accent); font-variant-numeric: tabular-nums; }
+  .sec .lede { color: var(--ink-2); margin: 0 0 22px; max-width: 72ch; }
+
+  h3 {
+    font-size: 15px; font-weight: 700; letter-spacing: 0.01em;
+    margin: 30px 0 10px;
+  }
+  p { max-width: 66ch; }
+  ul { padding-left: 1.15em; }
+  li { margin: 5px 0; max-width: 72ch; }
+
+  /* tables */
+  .tblwrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; margin: 14px 0 8px; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th {
+    text-align: left; font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase;
+    color: var(--ink-2); font-weight: 700;
+    padding: 10px 14px; border-bottom: 1px solid var(--line);
+    background: var(--bg-soft); white-space: nowrap;
+  }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--line); vertical-align: top; font-variant-numeric: tabular-nums; }
+  tr:last-child td { border-bottom: none; }
+  td.code, .fname { font-family: ui-monospace, "Cascadia Mono", "SF Mono", Consolas, monospace; font-size: 12.8px; color: var(--mono); }
+  td .subtd { color: var(--ink-2); font-size: 13px; }
+
+  .tag { display: inline-block; font-family: ui-monospace, monospace; font-size: 11px; font-weight: 700; letter-spacing: 0.05em; padding: 2px 8px; border-radius: 5px; white-space: nowrap; }
+  .tag.p0 { background: var(--crit-soft); color: var(--crit); }
+  .tag.p1 { background: var(--warn-soft); color: var(--warn); }
+  .tag.p2 { background: var(--bg-chip); color: var(--ink-2); }
+
+  /* drift rows */
+  .sev { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 8px; vertical-align: 1px; }
+  .sev.hi { background: var(--crit); }
+  .sev.md { background: var(--warn); }
+  .sev.lo { background: var(--ink-2); }
+
+  .callout {
+    border: 1px solid var(--line); border-left: 3px solid var(--accent);
+    background: var(--bg-soft); border-radius: 8px;
+    padding: 14px 18px; margin: 18px 0; font-size: 14.5px;
+  }
+  .callout b { font-family: ui-monospace, monospace; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); display: block; margin-bottom: 6px; }
+  .callout p { margin: 0; max-width: 76ch; }
+
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 14px; }
+  @media (max-width: 820px) { .grid2 { grid-template-columns: 1fr; } }
+  .card { border: 1px solid var(--line); border-radius: 10px; padding: 18px 20px; background: var(--bg-soft); }
+  .card h3 { margin: 0 0 10px; }
+  .card ul { margin: 0; }
+
+  .verdict-band {
+    border: 1px solid var(--line); border-radius: 12px;
+    padding: 22px 26px; margin: 34px 0 0;
+    background: linear-gradient(0deg, var(--bg-soft), var(--bg));
+  }
+  .verdict-word {
+    font-size: 15px; font-weight: 700; color: var(--accent);
+    letter-spacing: 0.04em; text-transform: uppercase;
+  }
+  .verdict-band p { margin: 8px 0 0; max-width: 80ch; }
+  .foot { margin-top: 60px; padding-top: 16px; border-top: 1px solid var(--line); color: var(--ink-2); font-size: 12.5px; }
+  .foot .mono { color: var(--mono); }
+  ::selection { background: var(--accent-soft); }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+</style>
+
+<div class="wrap">
+
+  <div class="eyebrow">Scout · documentation audit</div>
+  <h1>Docs vs. code state &amp; AI navigability</h1>
+  <p class="sub">An in-depth comparison of every documentation file in the Scout repo against what the code actually does — what&rsquo;s drifted, what&rsquo;s missing, and how well an AI agent can find its way around.</p>
+
+  <div class="meta">
+    <span><b>Target</b> <code>C:\Workspace\Project_AI\Scout</code></span>
+    <span><b>Branch</b> <code>scout/0.4.7-discovery-green</code> @ <code>5f8eaea</code></span>
+    <span><b>Package version</b> <code>0.6.2</code></span>
+    <span><b>Date</b> 2026-08-10</span>
+    <span><b>Files audited</b> 37 docs + 36 src modules + 10 scripts + 1 workflow</span>
+  </div>
+
+  <div class="chips">
+    <span class="chip warn"><span class="n">11</span> cross-doc contradictions</span>
+    <span class="chip warn"><span class="n">7</span> stale claims (code vs docs)</span>
+    <span class="chip crit"><span class="n">3</span> broken/missing references</span>
+    <span class="chip accent"><span class="n">17</span> missing-doc recommendations</span>
+    <span class="chip ok"><span class="n">5</span> documented-but-unimplemented</span>
+    <span class="chip">3&nbsp; index gaps (documents unreachable from indexes)</span>
+  </div>
+
+  <div class="sec">
+    <h2><span class="num">01</span> What is healthy</h2>
+    <p class="lede">The audit found real strengths worth naming first — several practices here are better than most projects of this size.</p>
+    <ul>
+      <li><b>Schemas and runtime validators are coupled</b>: <code>schemas/README.md</code> accurately maps each JSON schema to its validator and emission point. This is the most reliable doc in the repo.</li>
+      <li><b>Canonical single-source vocabulary</b>: claim statuses/aliases in <code>docs/income-ops.md</code> are consistent across the ADR, runbooks, PROJECT_CONTEXT, and CHANGELOG.</li>
+      <li><b>Runbooks carry explicit allow/deny lists</b> per stage — genuine safety documentation, not boilerplate.</li>
+      <li><b>CHANGELOG.md is disciplined</b> and is the de-facto feature reference; benchmark targets are consistent across every doc that cites them.</li>
+      <li><b>Artifact-first agent contract</b>: <code>handoff_package.json</code> as primary entrypoint, validated on export, with a defined read order in AGENTS.md.</li>
+    </ul>
+  </div>
+
+  <div class="sec">
+    <h2><span class="num">02</span> Confirmed drift — docs vs. actual state</h2>
+    <p class="lede">Every item below was verified against the code on disk, not just cross-checked between docs. Grouped by severity.</p>
+
+    <h3>High — an agent will act wrongly from these</h3>
+    <div class="tblwrap">
+      <table>
+        <tr><th style="width:34%">Finding</th><th>Evidence</th></tr>
+        <tr><td><span class="sev hi"></span><b>Version identity is broken in 4 places</b><br><span class="subtd">Help banner says 0.6.1; package.json says 0.6.2; PROJECT_CONTEXT says &ldquo;0.6.2 on main&rdquo;; main is actually at 0.4.7–0.6.0; the branch name says 0.4.7.</span></td>
+          <td><code>cli.js:1039</code> banner &ldquo;Scout 0.6.1&rdquo;; <code>algora-api-enrich.js:52</code> User-Agent &ldquo;Scout/0.6.1&rdquo;; <code>origin/main</code> HEAD <code>8228a3d</code> &ldquo;Scout 0.4.7–0.6.0&rdquo;; working branch <code>scout/0.4.7-discovery-green</code> carries the 0.6.1/0.6.2 commits. An agent asking &ldquo;what version is current?&rdquo; gets four different answers.</td></tr>
+        <tr><td><span class="sev hi"></span><b>Primary runbook teaches dead commands</b><br><span class="subtd"><code>discovery-runbook.md</code> documents <code>scout run --safe</code> — the flag is accepted but never read by the CLI (it only appears inside the help text). Same runbook names <code>rewarded-typescript</code>, a preset that no longer exists.</span></td>
+          <td><code>grep --safe cli.js</code> hits only the help string at <code>cli.js:1042</code>; <code>profiles.js</code> has no <code>rewarded-typescript</code> preset (legacy of 0.2.0, replaced by the rewarded-* family).</td></tr>
+        <tr><td><span class="sev hi"></span><b>Primary runbook states the wrong handoff schema</b><br><span class="subtd"><code>discovery-runbook.md</code> says &ldquo;writes handoff schema 1.1&rdquo; unconditionally. The code emits 1.1 for <code>beginner</code> intents and 1.2 (with claim fields) for <code>rewarded</code> — the income path.</span></td>
+          <td><code>decision-cockpit.js:140</code>: <code>discovery_intent === "rewarded" ? "1.2" : "1.1"</code>. AGENTS.md (the agent&rsquo;s first stop) also documents only schema 1.1.</td></tr>
+        <tr><td><span class="sev hi"></span><b><code>SCOUT_SANDBOX_IMAGE</code> is documented but does not exist</b><br><span class="subtd">PROJECT_CONTEXT, .env.example, and CHANGELOG document it as configurable; nothing in <code>src/</code> or <code>scripts/</code> reads it. The sandbox image is hardcoded <code>node:20-alpine</code>.</span></td>
+          <td><code>grep -r SANDBOX_IMAGE src/ scripts/</code> → zero hits. <code>probe.js:26</code> hardcodes the image. README also says <code>docker build -t scout-sandbox:latest</code> — a second, different image name.</td></tr>
+        <tr><td><span class="sev hi"></span><b>Two profiles exist in code but in no doc table</b><br><span class="subtd"><code>rewarded-typescript</code> and <code>rewarded-verified-only</code> are real presets (<code>profiles.js</code>); README&rsquo;s discovery-presets table lists 8 of 10, PROJECT_CONTEXT the same.</span></td>
+          <td>README table: 8 presets. Code (<code>profiles.js</code> PROFILE_PRESETS): 10. The two omissions are unreachable for a doc-driven agent, and the ADR&rsquo;s profile-roles table omits both too.</td></tr>
+    </table>
+    </div>
+
+    <h3>Medium — internal contradictions that mislead</h3>
+    <div class="tblwrap">
+      <table>
+        <tr><th style="width:34%">Finding</th><th>Evidence</th></tr>
+        <tr><td><span class="sev md"></span><b>Research docs read as current</b><br><span class="subtd">No status headers anywhere in <code>docs/research/</code>: <code>discovery-reliability-design.md</code> says search pace default 2500&nbsp;ms (now 4000); <code>bounty-platforms.md</code> says Algora live-check &ldquo;Not implemented&rdquo; (shipped in 0.6.0) and &ldquo;7 repos&rdquo; (now 10); <code>handoff-schema-research.md</code> proposes <code>SCOUT_HANDOFF_SCHEMA=1.2</code> env var that was never built, omits <code>opire</code> from the platform enum (schema ships it), and its ledger example lacks the <code>researching</code> status.</span></td>
+          <td>Contradictions vs PROJECT_CONTEXT (pace 4000), CHANGELOG 0.6.0/0.6.1/0.5.1, and <code>schemas/handoff-package-1.2.json</code> (enum <code>algora|issuehunt|opire|unknown</code>).</td></tr>
+        <tr><td><span class="sev md"></span><b>Dead-but-real policy artifact</b> <i>(audit correction, post-fix)</i><br><span class="subtd"><code>src/scout/default-policy.yaml</code> has existed since the initial commit: a declarative policy spec (allowed/denied/requires-approval per mode). Nothing in code loads it — runtime policy is <code>policy.js</code>. The ADR&rsquo;s reference was <b>correct</b>; the initial audit flagged it as a ghost via content-grep alone (a false negative). Corrected: the ADR now lists both, with the &ldquo;not loaded at runtime&rdquo; caveat.</span></td>
+          <td><code>git log --follow -- default-policy.yaml</code> → first commit <code>e35e7f2</code>; <code>grep -rn "default-policy\|policy.yaml" src/ scripts/ schemas/</code> → zero references in code.</td></tr>
+        <tr><td><span class="sev md"></span><b>Report schema lags the report it validates</b><br><span class="subtd"><code>schemas/scout-report-1.0.json</code> has no <code>discovery_query_stats</code>, but CHANGELOG 0.6.1 shipped it and real reports (<code>scout_explore_report.json</code>) carry the Discovery Coverage table. Runtime validation is code-side, so the JSON schema file is decorative for this field.</span></td>
+          <td>CHANGELOG 0.6.1; <code>scout_explore_report.md</code> shows the coverage table; schema JSON lacks the field.</td></tr>
+        <tr><td><span class="sev md"></span><b>Index gaps — real docs unreachable from their indexes</b><br><span class="subtd"><code>runbooks/README.md</code> indexes 6 runbooks; <code>bounty-claim-runbook.md</code> (the cash-in claim flow) is missing. <code>docs/research/README.md</code> indexes 5 of 7 files — <code>algora-api-spike.md</code> and <code>scout-scorecard-2026-06-24.md</code> are not listed.</span></td>
+          <td>Directory listing vs index tables — verified both.</td></tr>
+        <tr><td><span class="sev md"></span><b>CLI surface tables are incomplete</b><br><span class="subtd">PROJECT_CONTEXT&rsquo;s CLI table omits <code>claims stats</code> (documented two paragraphs later); the runbook index omits <code>export-shortlist</code> and <code>claims</code> from entry commands; the monitoring runbook doesn&rsquo;t mention the new <code>SCOUT_TOP</code> / <code>SCOUT_WEBHOOK_JSON</code> output lines.</span></td>
+          <td><code>cli.js</code> implements <code>claims stats</code> and <code>export-shortlist</code>; notify emits all three lines (<code>cli.js:641/645/649</code>).</td></tr>
+        <tr><td><span class="sev md"></span><b><code>.env.example</code> is missing 4 documented vars</b><br><span class="subtd"><code>SCOUT_SEARCH_PACE_MS</code>, <code>SCOUT_SEARCH_MAX_RETRIES</code>, <code>SCOUT_SEARCH_SECONDARY_COOLDOWN_MS</code>, <code>SCOUT_ALGORA_API_KEY</code> — all documented in PROJECT_CONTEXT, none in the example file.</span></td>
+          <td>Diff .env.example vs PROJECT_CONTEXT env table.</td></tr>
+    </table>
+    </div>
+
+    <h3>Low — noise and rough edges</h3>
+    <ul>
+      <li><span class="sev lo"></span><b>Root-level generated clutter:</b> 5 report families (<code>scout_report*</code>, <code>scout_watch_report*</code>, <code>scout_explore_report*</code>, <code>scout_vespera_4_9*</code>) + <code>handoff-*</code> + <code>*.repro.json</code> sit at repo root — three in a pre-0.5 report format. <code>reports/</code> holds 12 ad-hoc dumps (<code>hunt_ts</code>, <code>query_stats_dev</code>, …) with no naming convention or cleanup policy.</li>
+      <li><span class="sev lo"></span><b>Stale legacy artifacts:</b> <code>scout_sessions/</code> contains <code>codex_summary.md</code> outputs — the vendor-specific name removed in 0.4.0 — alongside pre-schema handoff .md files; a globbing agent meets a naming scheme the docs say no longer exists.</li>
+      <li><span class="sev lo"></span><b>Target drift in audit docs:</b> broad-query gate target reads 3/3 in one place, ≥3 in another, ≥3/6 in a third (audit 2026-06-23, scorecard 2026-06-24).</li>
+      <li><span class="sev lo"></span><b>Version-number oddities in CHANGELOG:</b> the 0.5.5 entry says &ldquo;CLI help banner → Scout 0.6.0&rdquo; — the banner has run ahead of releases ever since.</li>
+    </ul>
+  </div>
+
+  <div class="sec">
+    <h2><span class="num">03</span> Missing docs to add — prioritized</h2>
+    <p class="lede">Ordered by how much an AI agent&rsquo;s correctness depends on them. P0 = an agent is wrong today; P1 = an agent is slower or confused; P2 = polish.</p>
+    <div class="tblwrap">
+      <table>
+        <tr><th style="width:10%">Priority</th><th style="width:36%">Document</th><th>What it should contain</th></tr>
+        <tr><td><span class="tag p0">P0</span></td><td><code>docs/README.md</code> — top-level doc index</td><td>Every doc with a one-line role and a status marker (<b>current</b> / <b>superseded</b> / <b>research</b> / <b>ADR</b>). Today the index is split across three READMEs (architecture, research, runbooks) with no root entry point, and nothing tells a reader which research docs are still true.</td></tr>
+        <tr><td><span class="tag p0">P0</span></td><td><code>docs/architecture/ARCHITECTURE.md</code> — module map</td><td>Group the 36 <code>src/scout</code> modules by pipeline stage (ingest → filter → package → ops → policy), one line each, plus the end-to-end stage narrative (what <code>discover</code>→<code>static</code>→<code>cockpit</code>→<code>handoff</code> each produces and why). Nothing today maps the codebase; the ADR&rsquo;s logical-package table is the closest thing and it is income-funnel-specific.</td></tr>
+        <tr><td><span class="tag p0">P0</span></td><td>Status headers on all <code>docs/research/*</code></td><td>One-line frontmatter-style header: e.g. <i>&ldquo;Superseded by CHANGELOG 0.4.7 (pace raised to 4000)&rdquo;</i>, <i>&ldquo;Implemented in 0.6.0 behind <code>algora_platform_enrich</code>&rdquo;</i>. Kills the whole class of stale-claim errors at the source.</td></tr>
+        <tr><td><span class="tag p0">P0</span></td><td>Version-reality fix</td><td>Bump banner/User-Agent to 0.6.2; correct PROJECT_CONTEXT &ldquo;0.6.2 on main&rdquo; (main is 0.4.7–0.6.0); state the branch strategy in CONTRIBUTING (working branch <code>scout/0.4.7-discovery-green</code> is ahead of main — either merge it or document why not).</td></tr>
+        <tr><td><span class="tag p0">P0</span></td><td>Full profile catalog</td><td>Add the 2 missing presets (<code>rewarded-typescript</code>, <code>rewarded-verified-only</code>) to README/PROJECT_CONTEXT tables — or explicitly mark them internal/legacy, whichever is true.</td></tr>
+        <tr><td><span class="tag p1">P1</span></td><td><code>TROUBLESHOOTING.md</code></td><td>The operational knowledge scattered across research docs and the handoff: GitHub 403/429 secondary rate limits (quiet period 30–60 min), 422 seed-repo failures (calcom, unkey, formance — pruned ones), cache clearing (<code>--no-cache</code>, <code>.scout/cache</code>), seed audits, &ldquo;full preset without token silently falls back to fast&rdquo;.</td></tr>
+        <tr><td><span class="tag p1">P1</span></td><td>Fix the three indexes + stale runbook content</td><td>Add <code>bounty-claim-runbook.md</code> to runbooks/README; add the 2 files to research/README; strip <code>--safe</code> and <code>rewarded-typescript</code> from discovery-runbook; fix its schema claim to 1.1/1.2; update AGENTS.md handoff contract for 1.2.</td></tr>
+        <tr><td><span class="tag p1">P1</span></td><td><code>.env.example</code> sync + sandbox-image resolution</td><td>Add the 4 missing vars. For <code>SCOUT_SANDBOX_IMAGE</code>: either implement it in <code>probe.js</code> (one line) or delete it from docs — and unify <code>node:20-alpine</code> vs <code>scout-sandbox:latest</code>.</td></tr>
+        <tr><td><span class="tag p1">P1</span></td><td>Artifacts &amp; output policy</td><td>One doc + .gitignore entry: where outputs live (<code>.scout/</code> runtime, <code>reports/</code>, <code>scout_sessions/</code>, session <code>--out-dir</code>), the session-bundle naming, and a retention/cleanup rule. Move root-level report families into a folder (or gitignore them) so docs and data stop sharing a namespace.</td></tr>
+        <tr><td><span class="tag p1">P1</span></td><td>Schema sync</td><td>Add <code>discovery_query_stats</code> to <code>scout-report-1.0.json</code> (or document the &ldquo;filename is the version&rdquo; policy and that report schema lags implementation).</td></tr>
+        <tr><td><span class="tag p1">P1</span></td><td><code>SECURITY.md</code> / policy model</td><td>Consolidate the safety story: <code>policy.js</code> operation matrix, probe sandbox contract, egress stance (&ldquo;Scout does not enforce packet-level egress&rdquo;), denied-ops list from AGENTS.md. Decide the fate of <code>default-policy.yaml</code> — wire it into code or mark it a tracked spec that <code>policy.js</code> mirrors.</td></tr>
+        <tr><td><span class="tag p2">P2</span></td><td>Glossary</td><td>GREEN/YELLOW/RED/GRAY verdicts, handoff_mode values, ROI fields (estimated_effort_hours, claim_friction_score, stack_fit_score), source types — used all over the docs, defined nowhere in one place.</td></tr>
+        <tr><td><span class="tag p2">P2</span></td><td>ADR index</td><td><code>income-funnel.md</code> is the only ADR and nothing indexes ADR status; a one-page decision log (status, date, supersedes) makes the architecture doc a place an agent trusts.</td></tr>
+        <tr><td><span class="tag p2">P2</span></td><td>Report-format versioning note</td><td>The root <code>scout_report.md</code> files are pre-0.5 format (no Source/ROI columns); a one-liner in the artifacts doc explains the format history so nobody treats old reports as current output.</td></tr>
+    </table>
+    </div>
+  </div>
+
+  <div class="sec">
+    <h2><span class="num">04</span> Critique — how this repo serves an AI agent</h2>
+    <p class="lede">Assessed as: a cold-start AI agent (Claude Code, Cursor, Codex) lands in this repo and must decide what Scout is, what it can do, and how to operate it safely.</p>
+
+    <div class="grid2">
+      <div class="card">
+        <h3>What already works well</h3>
+        <ul>
+          <li><b>AGENTS.md gives a correct read order</b> for session artifacts — the first thing a coding agent needs.</li>
+          <li><b>Artifact-first contract:</b> <code>handoff_package.json</code> + <code>scout_session.json</code> tell an agent what happened without reading source.</li>
+          <li><b>Runbooks with deny-lists</b> — the safety model is discoverable, not implied.</li>
+          <li><b>Self-validating outputs:</b> exports validate by default; schemas and validators stay in lockstep.</li>
+          <li><b>CHANGELOG is a true history</b> — the single most reliable doc in the repo for feature archaeology.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>Where an agent gets lost</h3>
+        <ul>
+          <li><b>No repo map:</b> the agent must synthesize six docs to learn what exists; <code>src/</code> has no overview anywhere.</li>
+          <li><b>Four competing version truths</b> (banner / package / PROJECT_CONTEXT / branch name).</li>
+          <li><b>The primary runbook teaches a no-op flag</b> (<code>--safe</code>) and a dead preset — following docs produces wrong behavior.</li>
+          <li><b>Research docs indistinguishable from current ones</b> — an agent can design against superseded specs (<code>SCOUT_HANDOFF_SCHEMA</code> never existed).</li>
+          <li><b>Docs and data share the root namespace:</b> generated reports pollute search results; an agent globbing <code>*.md</code> can&rsquo;t tell documentation from output.</li>
+          <li><b>Key income-path contract underdocumented:</b> AGENTS.md &amp; discovery-runbook describe only schema 1.1 — the beginner lane — while the primary use is rewarded cash-in on 1.2.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="callout">
+      <b>Verdict</b>
+      <p>The documentation is unusually good for a personal tool — but it is written for someone who already knows the system, and the entry points serve the beginner lane while the product lives in the rewarded lane. The drift is not decay from neglect; it is the cost of fast shipping with docs spread across six files that each restate the same facts. Every high-severity failure an agent would hit is fixed by deleting or dating stale statements, not by writing more.</p>
+    </div>
+  </div>
+
+  <div class="sec">
+    <h2><span class="num">05</span> Suggested execution order</h2>
+    <p class="lede">A ~90-minute pass in five batches; each batch is independently shippable.</p>
+    <div class="tblwrap">
+      <table>
+        <tr><th style="width:16%">Batch</th><th style="width:44%">Work</th><th>Files touched</th></tr>
+        <tr><td><b>1 · Truth pass</b></td><td>Bump banner/User-Agent to 0.6.2 · fix PROJECT_CONTEXT version claim · fix ADR ghost reference · add the 2 profiles to preset tables</td><td><code>cli.js</code>, <code>algora-api-enrich.js</code>, <code>PROJECT_CONTEXT.md</code>, <code>README.md</code>, <code>income-funnel.md</code></td></tr>
+        <tr><td><b>2 · Kill stale commands</b></td><td>Remove <code>--safe</code> + <code>rewarded-typescript</code> examples · correct discovery-runbook schema claim · update AGENTS.md handoff contract for 1.2</td><td><code>discovery-runbook.md</code>, <code>AGENTS.md</code></td></tr>
+        <tr><td><b>3 · Fix indexes</b></td><td>Add <code>bounty-claim-runbook</code> to runbook index · add 2 files to research index · add status headers to all research docs</td><td><code>runbooks/README.md</code>, <code>docs/research/README.md</code>, <code>docs/research/*</code></td></tr>
+        <tr><td><b>4 · New docs</b></td><td>Write <code>docs/README.md</code> (root index w/ statuses) + <code>ARCHITECTURE.md</code> (module map + stage narrative)</td><td><code>docs/README.md</code>, <code>docs/architecture/ARCHITECTURE.md</code></td></tr>
+        <tr><td><b>5 · Housekeeping</b></td><td>Sync <code>.env.example</code> · implement or drop <code>SCOUT_SANDBOX_IMAGE</code> · gitignore root reports · write <code>TROUBLESHOOTING.md</code> · schema sync for <code>discovery_query_stats</code></td><td><code>.env.example</code>, <code>probe.js</code>, <code>.gitignore</code>, <code>TROUBLESHOOTING.md</code>, <code>scout-report-1.0.json</code></td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="foot">
+    <span class="mono">Scout · documentation audit · 2026-08-10 · branch <code>scout/0.4.7-discovery-green</code> @ <code>5f8eaea</code></span> — audit methodology: full read of 37 doc files + module/CLI/env-var/flag inventory of <code>src/scout</code> + cross-check of every command, flag, env var, schema version, and preset named in any doc against code; all headline claims re-verified by grep before writing.
+  </div>
+
+</div>

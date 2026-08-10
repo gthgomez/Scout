@@ -1,5 +1,7 @@
 # Bounty platforms survey — Scout integration research
 
+> **Status:** Research snapshot (2026-06-23) — partially superseded: Algora live check implemented since 0.6.0; `rewarded-programs-algora` expanded to 10 repos (0.6.1); Opire integrated into handoff schema 1.2.
+
 Research for expanding reward discovery beyond GitHub label/title heuristics. Scout currently detects **Algora** and **IssueHunt** URLs in [`reward-signals.js`](../../src/scout/reward-signals.js).
 
 ## Platform comparison

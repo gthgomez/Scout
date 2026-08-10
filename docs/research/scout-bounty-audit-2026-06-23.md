@@ -1,5 +1,7 @@
 # Scout bounty discovery audit — 2026-06-23
 
+> **Status:** Historical audit record (2026-06-23) — methodology still current; gate targets have evolved (see docs/income-ops.md).
+
 Baseline audit for `rewarded-hunt` after 0.4.4 OR-collapse. Artifact: [`.scout/benchmark-rewarded-hunt.json`](../../.scout/benchmark-rewarded-hunt.json).
 
 ## Executive summary

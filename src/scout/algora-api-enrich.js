@@ -49,7 +49,7 @@ export async function fetchAlgoraApiMetadata({
     headers: {
       Accept: "application/json",
       Authorization: `Bearer ${apiKey}`,
-      "User-Agent": "Scout/0.6.1 (read-only bounty metadata)",
+      "User-Agent": "Scout/0.6.2 (read-only bounty metadata)",
     },
   });
   if (!response.ok) {

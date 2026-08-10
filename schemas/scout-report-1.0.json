@@ -28,6 +28,10 @@
       "type": "array",
       "items": { "$ref": "#/$defs/collectionError" }
     },
+    "discovery_query_stats": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/discoveryQueryStats" }
+    },
     "candidates": {
       "type": "array",
       "items": { "$ref": "#/$defs/candidateIssue" }
@@ -70,6 +74,17 @@
         "query": { "type": ["string", "null"] },
         "message": { "type": "string" },
         "observed_at": { "type": "string" }
+      }
+    },
+    "discoveryQueryStats": {
+      "type": "object",
+      "properties": {
+        "query": { "type": "string" },
+        "kind": { "type": "string" },
+        "items_returned": { "type": "number" },
+        "items_selected": { "type": "number" },
+        "pages_fetched": { "type": "number" },
+        "error": { "type": ["string", "null"] }
       }
     },
     "candidateIssue": {

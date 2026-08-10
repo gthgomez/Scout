@@ -1,5 +1,7 @@
 # ROI ranking and skill-match design
 
+> **Status:** Implemented (0.5.0–0.5.4) — `roi-ranking.js`; `rank_shortlist_by` defaults to `roi` for rewarded presets.
+
 Research for Phase 3 triage upgrades. Goal: rank bounties by **expected cash-in probability**, not just payout amount.
 
 ## Current behavior

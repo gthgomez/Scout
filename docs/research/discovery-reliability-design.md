@@ -1,5 +1,7 @@
 # Discovery reliability design — search pacing and 403 retry
 
+> **Status:** Superseded by implementation (0.4.5–0.4.7) — pacing/retry/cooldown shipped; default `SCOUT_SEARCH_PACE_MS` is now 4000 (raised from 2500).
+
 Research deliverable for P0 Scout upgrade. Implements recommendations for [`discovery.js`](../../src/scout/discovery.js) and [`github-client.js`](../../src/scout/github-client.js).
 
 ## Problem statement

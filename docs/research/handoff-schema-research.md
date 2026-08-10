@@ -1,5 +1,7 @@
 # Handoff schema 1.2 — claim workflow extension research
 
+> **Status:** Superseded by handoff-package-1.2.json (0.5.1) — emit trigger is `discovery_intent === "rewarded"` (the proposed `SCOUT_HANDOFF_SCHEMA` env var was never implemented); `platform_name` enum includes `opire`; ledger statuses include `researching`.
+
 Research for Phase 5 cash-in funnel. Base schema: [`schemas/handoff-package-1.1.json`](../../schemas/handoff-package-1.1.json).
 
 ## Principle

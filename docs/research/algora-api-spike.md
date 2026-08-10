@@ -1,5 +1,7 @@
 # Algora API spike — research notes
 
+> **Status:** Implemented — shipped as `algora-enrich.js` (public-page scrape, 0.6.0) + `algora-api-enrich.js` (API client, 0.6.1); see CHANGELOG.
+
 Status: **implemented as optional spike** in `algora-api-enrich.js` with HTML scrape fallback in `algora-enrich.js`.
 
 ## Current Scout path

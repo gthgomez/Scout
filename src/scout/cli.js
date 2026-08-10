@@ -1036,7 +1036,7 @@ function printProbeHelp() {
 }
 
 function printHelp() {
-  console.log(`Scout 0.6.1
+  console.log(`Scout 0.6.2
 
 Agent-facing CLI commands:
   scout run --safe --limit 50 --out scout_report.md

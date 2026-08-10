@@ -81,7 +81,7 @@ export async function applyAlgoraPlatformEnrich({
       const response = await fetchImpl(url, {
         headers: {
           Accept: "text/html,application/json",
-          "User-Agent": "Scout/0.6.1 (read-only bounty metadata)",
+          "User-Agent": "Scout/0.6.2 (read-only bounty metadata)",
         },
       });
       if (!response.ok) {

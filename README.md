@@ -10,7 +10,7 @@ Policy gates **Scout CLI operations** (allowed/denied commands per runbook role)
 
 - **Node.js 20+**
 - **GitHub token**: copy `.env.example` to `.env` and set `GITHUB_TOKEN` (or `GH_TOKEN`) — required for `full` workflow preset (archive fetch)
-- **Docker** (optional): for `scout probe` only — `docker build -t scout-sandbox:latest .`
+- **Docker** (optional): for `scout probe` only — `docker build -t scout-sandbox:latest .`. The built image is used by setting `SCOUT_SANDBOX_IMAGE=scout-sandbox:latest`; the default sandbox image is `node:20-alpine`.
 - **Algora API key** (optional): `ALGORA_API_KEY` for platform metadata enrich on `rewarded-cash-in`
 
 ## Income-first quick start
@@ -67,6 +67,8 @@ With `GITHUB_TOKEN` or `GH_TOKEN` set, `workflow run` defaults to **full** prese
 | `rewarded-hunt` | rewarded | Broad hunt with strict GREEN gates |
 | `rewarded-hunt-dev` | rewarded | Fast local iteration (15-candidate cap) |
 | `rewarded-trusted-only` | rewarded | Curated seed programs only |
+| `rewarded-typescript` | rewarded | TypeScript bounty/reward/sponsor labels + rewarded-programs seeds, 5 broad queries (0.2.0 legacy) |
+| `rewarded-verified-only` | rewarded | TypeScript, verified reward required, shortlist GREEN+YELLOW |
 | `beginner-python-ts` | beginner | Learning path — deprioritize for income |
 | `beginner-docs-only` | beginner | docs-friendly repos |
 | `beginner-small-repos` | beginner | explicit `stars:<500` filter |

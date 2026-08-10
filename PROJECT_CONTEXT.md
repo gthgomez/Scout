@@ -6,14 +6,14 @@ Scout is a policy-enforced backend for finding open-source contribution and **pa
 
 Policy gates **Scout CLI operations** only; harnesses must follow runbooks for allowed/denied actions outside Scout.
 
-Current release: **0.6.2** on `main`.
+Current release: **0.6.2** (branch `scout/0.4.7-discovery-green`; `main` tracks 0.4.7–0.6.0 pending merge).
 
 ## Discovery Intents
 
 | Intent | Mission | Presets |
 | --- | --- | --- |
 | `beginner` | Learning-focused contributions | `beginner-python-ts`, `beginner-docs-only`, `beginner-small-repos` |
-| `rewarded` | Bounty/reward cash-in hunts | `rewarded-cash-in`, `rewarded-explore`, `rewarded-hunt`, `rewarded-hunt-dev`, `rewarded-trusted-only` |
+| `rewarded` | Bounty/reward cash-in hunts | `rewarded-cash-in`, `rewarded-explore`, `rewarded-hunt`, `rewarded-hunt-dev`, `rewarded-trusted-only`, `rewarded-typescript`, `rewarded-verified-only` |
 
 **Income-first default:** `rewarded-cash-in` (GREEN-only, ROI-ranked, Algora enrich).
 
@@ -64,7 +64,7 @@ JSON Schemas: [`schemas/README.md`](schemas/README.md).
 | `scout workflow resume --session <dir>` | Continue incomplete session |
 | `scout discover` / `profile run` | Discovery |
 | `scout monitor --skip-known --notify` | Incremental watch (exit 1 on actionable events) |
-| `scout claims list\|add\|update` | Local bounty claim ledger |
+| `scout claims list\|add\|update\|stats` | Local bounty claim ledger |
 | `scout cockpit` / `scout handoff` | Decision drill-down and handoff export |
 | `scout probe` | Approval-bound Docker probes |
 

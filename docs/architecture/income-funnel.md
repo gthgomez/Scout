@@ -43,7 +43,7 @@ Auto-claim, auto-PR, and networked install probes remain **out of scope** for th
 | **filter** | `triage.js`, `reward-signals.js`, `bounty-spam.js`, `roi-ranking.js` | GitHub writes, payout truth |
 | **package** | `workflow.js`, `decision-cockpit.js`, handoff export, `claim-steps.js` | Coding agent execution |
 | **ops** | `monitor.js`, `claims-ledger.js`, `income-ops.js`, `scripts/income-ops.ps1`, act-top1, scorecard | Policy engine core |
-| **policy** | `policy.js`, `default-policy.yaml`, validators | Business ranking weights |
+| **policy** | `policy.js` (`defaultPolicy(mode)`), `default-policy.yaml` (declarative spec — tracked but not loaded at runtime), `validators.js` | Business ranking weights |
 
 Code may stay flat under `src/scout/`; these are **ownership boundaries**, not a forced monorepo split.
 

@@ -23,7 +23,7 @@ const MAX_DURATION_SECONDS = 120;
 const DEFAULT_DURATION_SECONDS = 60;
 
 export const DEFAULT_SANDBOX_POLICY = Object.freeze({
-  image: "node:20-alpine",
+  image: process.env.SCOUT_SANDBOX_IMAGE || "node:20-alpine",
   network: "none",
   timeout_seconds: DEFAULT_DURATION_SECONDS,
   cpu_count: 1,
