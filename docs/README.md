@@ -1,14 +1,14 @@
 # Scout documentation index
 
-Cold-start index for agents and humans: every doc in the repo, its role, and whether it is current. Navigate in this order: [`README.md`](../README.md) (quick start, presets) → [`PROJECT_CONTEXT.md`](../PROJECT_CONTEXT.md) (CLI surface, env vars, artifact contract) → the stage runbooks ([`src/scout/runbooks/README.md`](../src/scout/runbooks/README.md) — safety contracts, must-follow) → [`schemas/README.md`](../schemas/README.md) (artifact shapes). Architecture decisions live under [`architecture/`](architecture/README.md); research and historical audits under [`research/`](research/README.md).
+Cold-start index for agents and humans: every doc in the repo, its role, and whether it is current. Navigate in this order: [`README.md`](../README.md) (quick start, presets) → [`docs/agent/PROJECT_CONTEXT.md`](../agent/PROJECT_CONTEXT.md) (CLI surface, env vars, artifact contract) → the stage runbooks ([`src/scout/runbooks/README.md`](../src/scout/runbooks/README.md) — safety contracts, must-follow) → [`schemas/README.md`](../schemas/README.md) (artifact shapes). Architecture decisions live under [`architecture/`](architecture/README.md); research and historical audits under [`research/`](research/README.md).
 
 ## Index
 
 | Doc | Role | Status |
 | --- | --- | --- |
 | [`README.md`](../README.md) | Entry point, quick start, workflow + discovery presets | current |
-| [`PROJECT_CONTEXT.md`](../PROJECT_CONTEXT.md) | CLI surface, env vars, agent artifact contract | current |
-| [`AGENTS.md`](../AGENTS.md) | Agent routing, handoff contract | current |
+| [`docs/agent/PROJECT_CONTEXT.md`](../agent/PROJECT_CONTEXT.md) | CLI surface, env vars, agent artifact contract | current |
+| [`docs/agent/AGENTS.md`](../agent/AGENTS.md) | Agent routing, handoff contract | current |
 | [`CONTRIBUTING.md`](../CONTRIBUTING.md) | Branch/PR flow, self-hosted CI setup | current |
 | [`CHANGELOG.md`](../CHANGELOG.md) | Full release history | current |
 | [`.env.example`](../.env.example) | Env var template (GitHub token, Algora key, tuning knobs) | current |
