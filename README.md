@@ -4,7 +4,7 @@ Scout is a policy-enforced, agent-agnostic local tool for finding paid open-sour
 
 Policy gates **Scout CLI operations** (allowed/denied commands per runbook role). Agent harnesses must follow runbooks; Scout does not enforce policy inside external coding agents.
 
-**Current release: 0.6.2** — income ops pack (claims stats, act-top1, scorecard, rich webhooks) + lean platform-first cash-in yield.
+**Current release: [0.6.2](https://github.com/gthgomez/Scout/releases/tag/v0.6.2)** — income ops pack (claims stats, act-top1, scorecard, rich webhooks) + lean platform-first cash-in yield.
 
 ## Prerequisites
 
