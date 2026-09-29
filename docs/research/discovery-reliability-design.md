@@ -164,4 +164,4 @@ Run after pacing lands; compare in `.scout/benchmark-rewarded-hunt.json` lanes:
 | [`github-client.test.js`](../../src/scout/__tests__/github-client.test.js) | Retry tests |
 | [`discovery.js`](../../src/scout/discovery.js) | Optional `error_kind` on collection errors |
 | [`validators.js`](../../src/scout/validators.js) | Future `search_pace_ms` profile field |
-| [`PROJECT_CONTEXT.md`](../../PROJECT_CONTEXT.md) | Document `SCOUT_SEARCH_PACE_MS` |
+| [`PROJECT_CONTEXT.md`](../../agent/PROJECT_CONTEXT.md) | Document `SCOUT_SEARCH_PACE_MS` |
