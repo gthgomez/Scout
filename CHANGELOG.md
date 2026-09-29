@@ -286,7 +286,7 @@
 - `scout inspect --candidate-id <id>`
 - Subcommand help: `scout workflow|plan|probe --help`
 - Handoff schema 1.1: `recommended_packages`, `suggested_commands`, `schema_version`
-- [`AGENTS.md`](AGENTS.md) — handoff-first harness routing
+- [`AGENTS.md`](docs/agent/AGENTS.md) — handoff-first harness routing
 - `test:policy` in `npm run ci`
 
 ## [0.3.0] — Performance
