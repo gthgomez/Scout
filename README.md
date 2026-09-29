@@ -47,7 +47,9 @@ See [`src/scout/runbooks/README.md`](src/scout/runbooks/README.md) for the full 
 - [Monitoring](src/scout/runbooks/monitoring-runbook.md)
 - [Bounty Claim](src/scout/runbooks/bounty-claim-runbook.md)
 
-Artifact schemas: [`schemas/README.md`](schemas/README.md). Harness routing: [`AGENTS.md`](AGENTS.md) — start from `handoff_package.json`.
+Artifact schemas: [`schemas/README.md`](schemas/README.md). Docs index: [`docs/README.md`](docs/README.md).
+
+Internal agent notes (not project documentation): [`docs/agent/`](docs/agent/) — `AGENTS.md` (harness routing, start from `handoff_package.json`) and `PROJECT_CONTEXT.md` (CLI surface, env vars, artifact contract).
 
 ## Workflow Presets
 
