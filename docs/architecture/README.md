@@ -1,6 +1,6 @@
 # Scout architecture docs
 
-Authoritative design decisions for Scout. Implementation details and CLI usage stay in `PROJECT_CONTEXT.md`, `README.md`, and runbooks.
+Authoritative design decisions for Scout. Implementation details and CLI usage stay in `docs/agent/PROJECT_CONTEXT.md`, `README.md`, and runbooks.
 
 | Document | Purpose |
 |----------|---------|
