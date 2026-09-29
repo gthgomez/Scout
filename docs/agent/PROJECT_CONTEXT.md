@@ -76,7 +76,7 @@ JSON Schemas: [`schemas/README.md`](../../schemas/README.md).
 - Weekly: `pwsh ./scripts/income-ops.ps1 -Mode weekly` (bench + seed audit + scorecard)
 - Claims: `scout claims list|add|update|stats` — statuses `researching→claimed→pr_open→merged→paid|abandoned`
 - Docs: [`docs/income-ops.md`](../income-ops.md)
-- Architecture ADR + phase checklist: [`docs/architecture/`](../architecture/)
+- Architecture ADR + phase checklist: [`docs/architecture/`](../architecture/README.md)
 
 ## Verification
 
