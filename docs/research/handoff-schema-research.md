@@ -6,7 +6,7 @@ Research for Phase 5 cash-in funnel. Base schema: [`schemas/handoff-package-1.1.
 
 ## Principle
 
-Scout must **never** set `payout_verified_externally: true`. All platform verification is harness/human responsibility per [`AGENTS.md`](../../AGENTS.md).
+Scout must **never** set `payout_verified_externally: true`. All platform verification is harness/human responsibility per [`AGENTS.md`](../../agent/AGENTS.md).
 
 ## Proposed schema_version: 1.2
 
