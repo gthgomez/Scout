@@ -21,11 +21,11 @@ jobs:
       - name: Verify Node.js
         shell: pwsh
         run: |
+          $expected = (Get-Content .nvmrc -Raw).Trim()
           $v = (node --version).TrimStart('v')
-          $major = [int]($v -split '\.')[0]
           node --version
-          if ($major -lt 20) {
-            throw "Node 20+ required on self-hosted runner (found v$major)"
+          if ($v -ne $expected) {
+            throw "Node $expected (pinned in .nvmrc) required on self-hosted runner (found v$v). Install the pinned Node.js version."
           }
 
       - name: Run Scout local CI
