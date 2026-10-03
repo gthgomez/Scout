@@ -33,6 +33,7 @@ Artifact JSON Schemas live under [`schemas/`](schemas/). Runtime validators are 
 
 ## Agent docs
 
-- [`docs/agent/AGENTS.md`](docs/agent/AGENTS.md) — internal agent harness routing
+- [`AGENTS.md`](AGENTS.md) — repository instruction authority for agents
+- [`docs/agent/AGENT_HANDOFF.md`](docs/agent/AGENT_HANDOFF.md) — handoff workflow and contract
 - [`docs/agent/PROJECT_CONTEXT.md`](docs/agent/PROJECT_CONTEXT.md) — internal agent notes on CLI and artifacts
 - [`src/scout/runbooks/README.md`](src/scout/runbooks/README.md) — stage runbooks

@@ -7,8 +7,9 @@ Cold-start index for agents and humans: every doc in the repo, its role, and whe
 | Doc | Role | Status |
 | --- | --- | --- |
 | [`README.md`](../README.md) | Entry point, quick start, workflow + discovery presets | current |
+| [`AGENTS.md`](../AGENTS.md) | Repository instruction authority (agent routing, denied ops) | current |
 | [`docs/agent/PROJECT_CONTEXT.md`](../agent/PROJECT_CONTEXT.md) | CLI surface, env vars, agent artifact contract | current |
-| [`docs/agent/AGENTS.md`](../agent/AGENTS.md) | Agent routing, handoff contract | current |
+| [`docs/agent/AGENT_HANDOFF.md`](../agent/AGENT_HANDOFF.md) | Handoff workflow and contract (schemas 1.1/1.2) | current |
 | [`CONTRIBUTING.md`](../CONTRIBUTING.md) | Branch/PR flow, self-hosted CI setup | current |
 | [`CHANGELOG.md`](../CHANGELOG.md) | Full release history | current |
 | [`.env.example`](../.env.example) | Env var template (GitHub token, Algora key, tuning knobs) | current |

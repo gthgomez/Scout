@@ -49,7 +49,7 @@ See [`src/scout/runbooks/README.md`](src/scout/runbooks/README.md) for the full 
 
 Artifact schemas: [`schemas/README.md`](schemas/README.md). Docs index: [`docs/README.md`](docs/README.md).
 
-Internal agent notes (not project documentation): [`docs/agent/`](docs/agent/) — `AGENTS.md` (harness routing, start from `handoff_package.json`) and `PROJECT_CONTEXT.md` (CLI surface, env vars, artifact contract).
+Agent-facing docs: [`docs/agent/`](docs/agent/) — `PROJECT_CONTEXT.md` (CLI surface, env vars, artifact contract) and `AGENT_HANDOFF.md` (handoff workflow, contract schemas). Repository instructions for agents: root [`AGENTS.md`](AGENTS.md).
 
 ## Workflow Presets
 
