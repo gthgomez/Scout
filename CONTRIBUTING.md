@@ -3,10 +3,11 @@
 ## Local verification
 
 ```powershell
+npm ci --ignore-scripts
 npm run ci
 ```
 
-Runs syntax check, unit tests, adversarial eval, policy tests, and ESLint via [`scripts/ci.ps1`](scripts/ci.ps1).
+Installs pinned dependencies with `npm ci --ignore-scripts` (no `npm install` fallback — a failing `npm ci` must stay a failure), then runs syntax check, unit tests, adversarial eval, policy tests, and ESLint via [`scripts/ci.ps1`](scripts/ci.ps1).
 
 ## Branch and PR flow
 
@@ -20,7 +21,7 @@ Scout uses a **self-hosted Windows runner** only (no GitHub-hosted minutes). Wor
 
 ## Self-hosted runner requirements
 
-- Windows machine with Node.js **20+** (22 supported)
+- Windows machine with Node.js **22** at the version pinned in [`.nvmrc`](.nvmrc) (CI fails closed on any other version)
 - GitHub Actions runner registered with labels: `self-hosted`, `windows`
 - Runner must reach GitHub and have repo checkout access
 - CI runs: `pwsh ./scripts/ci.ps1`

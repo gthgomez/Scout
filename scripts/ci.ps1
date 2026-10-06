@@ -2,9 +2,12 @@
 $ErrorActionPreference = "Stop"
 Set-Location (Split-Path $PSScriptRoot -Parent)
 
-Write-Host "==> npm ci"
-npm ci --ignore-scripts 2>$null
-if ($LASTEXITCODE -ne 0) { npm install }
+Write-Host "==> npm ci (fail closed; no npm-install fallback)"
+npm ci --ignore-scripts
+if ($LASTEXITCODE -ne 0) {
+  Write-Error "npm ci failed (exit $LASTEXITCODE). Do not fall back to npm install; fix the lockfile instead."
+  exit $LASTEXITCODE
+}
 
 Write-Host "==> syntax check"
 node scripts/check-syntax.js

@@ -8,7 +8,7 @@ Policy gates **Scout CLI operations** (allowed/denied commands per runbook role)
 
 ## Prerequisites
 
-- **Node.js 20+**
+- **Node.js 22** (pinned in [`.nvmrc`](.nvmrc); `engines` range `>=22.12.0 <25`)
 - **GitHub token**: copy `.env.example` to `.env` and set `GITHUB_TOKEN` (or `GH_TOKEN`) — required for `full` workflow preset (archive fetch)
 - **Docker** (optional): for `scout probe` only — `docker build -t scout-sandbox:latest .`. The built image is used by setting `SCOUT_SANDBOX_IMAGE=scout-sandbox:latest`; the default sandbox image is `node:20-alpine`.
 - **Algora API key** (optional): `ALGORA_API_KEY` for platform metadata enrich on `rewarded-cash-in`
@@ -18,6 +18,7 @@ Policy gates **Scout CLI operations** (allowed/denied commands per runbook role)
 Primary profile for cash-in hunts:
 
 ```powershell
+npm ci --ignore-scripts
 npm run ci
 node src/scout/cli.js workflow run --profile rewarded-cash-in --workflow-preset full --out-dir scout_session
 ```
@@ -105,8 +106,11 @@ Exit code **1** when new or improved candidates appear (for schedulers).
 ## CI
 
 ```powershell
+npm ci --ignore-scripts
 npm run ci
 ```
+
+`npm ci` is the only supported install path — there is no `npm install` fallback. If `npm ci` fails, fix the lockfile; the failure is intentional (reproducible installs).
 
 GitHub Actions (self-hosted only): [`.github/workflows/ci-selfhosted.yml`](.github/workflows/ci-selfhosted.yml)
 
