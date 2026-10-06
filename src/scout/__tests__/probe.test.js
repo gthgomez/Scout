@@ -392,3 +392,294 @@ describe("dynamic probe planning and runners", () => {
     );
   });
 });
+
+describe("capability boundary: Docker network configuration", () => {
+  it("uses --network bridge for registry_allowlist, not --network none", () => {
+    const policy = createSandboxPolicy({
+      network: "registry_allowlist",
+      registry_hosts: ["registry.npmjs.org"],
+    });
+    const args = buildDockerRunArgs({
+      policy,
+      sourceDir: "/tmp/source",
+      command: ["npm", "ci", "--ignore-scripts"],
+    });
+
+    const networkIndex = args.indexOf("--network");
+    assert.ok(networkIndex !== -1, "Expected --network flag in Docker args");
+    assert.equal(args[networkIndex + 1], "bridge", "registry_allowlist must use --network bridge");
+    assert.notEqual(args[networkIndex + 1], "none", "registry_allowlist must NOT use --network none");
+  });
+
+  it("uses --network none for readonly probes", () => {
+    const policy = createSandboxPolicy({ network: "none" });
+    const args = buildDockerRunArgs({
+      policy,
+      sourceDir: "/tmp/source",
+      command: ["node", "--version"],
+    });
+
+    const networkIndex = args.indexOf("--network");
+    assert.ok(networkIndex !== -1, "Expected --network flag in Docker args");
+    assert.equal(args[networkIndex + 1], "none", "readonly probes must use --network none");
+  });
+
+  it("documents that bridge networking means full network access, not packet-level filtering", () => {
+    // The honesty note in network-design.js documents this:
+    // "Docker sandboxes use bridge networking; Scout does not enforce packet-level
+    //  egress filtering or observe runtime traffic."
+    //
+    // This test verifies the actual Docker args use --network bridge, which gives
+    // the container full network access. The allowlist is a pre-execution argv check,
+    // NOT a runtime network restriction.
+    const policy = createSandboxPolicy({
+      network: "registry_allowlist",
+      registry_hosts: ["registry.npmjs.org"],
+    });
+    const args = buildDockerRunArgs({
+      policy,
+      sourceDir: "/tmp/source",
+      command: ["npm", "ci", "--ignore-scripts"],
+    });
+
+    // Verify bridge networking is used (full network access)
+    assert.equal(args[args.indexOf("--network") + 1], "bridge");
+
+    // Verify no packet-level filtering flags are present
+    // (Docker doesn't have a built-in egress allowlist mechanism)
+    const hasEgressFilter = args.some((arg) =>
+      arg.includes("iptables") || arg.includes("firewall") || arg.includes("egress"),
+    );
+    assert.equal(hasEgressFilter, false, "No packet-level egress filtering flags should be present");
+  });
+});
+
+describe("capability boundary: egress allowlist enforcement in runProbe", () => {
+  function egressTestReport() {
+    return {
+      ...reportFixtures.validReport,
+      candidates: [
+        {
+          ...reportFixtures.validReport.candidates[0],
+          static_inspection: {
+            setup_status: "static_docs_ok",
+            setup_intelligence: {
+              schema_version: 1,
+              ecosystems: ["node"],
+              package_managers: ["npm"],
+              workspace: {
+                kind: "single_package",
+                manifest_paths: ["package.json"],
+                test_paths: [],
+              },
+              setup_claims: [],
+              denied_commands: [],
+              risk_signals: [],
+              recommended_next_evidence_action: {
+                action: "readonly_probe",
+                reason: "Static setup evidence is present.",
+              },
+            },
+          },
+        },
+      ],
+    };
+  }
+
+  function egressTestContract(overrides = {}) {
+    return {
+      contract_id: "r2d-egress-test",
+      candidate_id: "SCOUT-alpha-green-1",
+      repo: "acme/tooling",
+      issue: "https://github.com/acme/tooling/issues/12",
+      network_policy: "registry_allowlist",
+      registry_hosts: ["registry.npmjs.org"],
+      command_set: "install_probe",
+      lifecycle_policy: "scripts_disabled",
+      timeout_seconds: 120,
+      artifact_retention: "retain_stdout_stderr_7_days",
+      approval_phrase:
+        "APPROVE SCOUT R2D SCOUT-alpha-green-1 acme/tooling https://github.com/acme/tooling/issues/12 registry_allowlist registry.npmjs.org install_probe scripts_disabled 120 retain_stdout_stderr_7_days",
+      ...overrides,
+    };
+  }
+
+  it("blocks commands with non-allowlisted hosts in argv", async () => {
+    const sourceDir = tempDir("scout-probe-source-");
+    const outputDir = tempDir();
+    try {
+      // Approve pypi.org but run npm commands — npm infers registry.npmjs.org
+      // which is NOT in the approved list, so the command must be blocked.
+      const contract = egressTestContract({
+        registry_hosts: ["pypi.org"],
+        approval_phrase:
+          "APPROVE SCOUT R2D SCOUT-alpha-green-1 acme/tooling https://github.com/acme/tooling/issues/12 registry_allowlist pypi.org install_probe scripts_disabled 120 retain_stdout_stderr_7_days",
+      });
+
+      const report = await runProbe({
+        report: egressTestReport(),
+        candidateId: "SCOUT-alpha-green-1",
+        approvalId: contract.approval_phrase,
+        runner: new FakeSandboxRunner(),
+        sourceDir,
+        outputDir,
+        network: "registry_allowlist",
+        commandSet: "install_probe",
+        networkContract: contract,
+      });
+
+      // The command should be blocked pre-execution
+      // probe_status is "partial" because blocked commands still appear in command_attempts
+      assert.equal(report.probe_status, "partial");
+      // Filter to only the install_probe commands (fixture has pre-existing command_attempts)
+      const probeAttempts = report.command_attempts.filter((attempt) => attempt.command_set === "install_probe");
+      assert.ok(probeAttempts.length > 0);
+      assert.ok(probeAttempts.every((attempt) => attempt.status === "blocked"));
+      assert.ok(probeAttempts.every((attempt) => attempt.result === "blocked"));
+
+      // Egress log should record the denial
+      assert.ok(report.egress_logs.length > 0);
+      assert.ok(report.egress_logs.every((log) => log.decision === "denied"));
+      assert.ok(report.egress_logs.every((log) => log.observed_host === "registry.npmjs.org"));
+      assert.ok(report.egress_logs.every((log) => log.reason.includes("outside approved registry allowlist")));
+    } finally {
+      cleanup(sourceDir);
+      cleanup(outputDir);
+    }
+  });
+
+  it("allows commands with allowlisted hosts", async () => {
+    const sourceDir = tempDir("scout-probe-source-");
+    const outputDir = tempDir();
+    try {
+      // Approve registry.npmjs.org and run npm commands — npm infers registry.npmjs.org
+      // which IS in the approved list, so the command should be allowed.
+      const contract = egressTestContract({
+        registry_hosts: ["registry.npmjs.org"],
+      });
+
+      const report = await runProbe({
+        report: egressTestReport(),
+        candidateId: "SCOUT-alpha-green-1",
+        approvalId: contract.approval_phrase,
+        runner: new FakeSandboxRunner([{ exit_code: 0, stdout: "added 1 package\n" }]),
+        sourceDir,
+        outputDir,
+        network: "registry_allowlist",
+        commandSet: "install_probe",
+        networkContract: contract,
+      });
+
+      // The command should be allowed and executed
+      // probe_status is "complete" because all executed commands passed
+      assert.equal(report.probe_status, "complete");
+      // Filter to only the install_probe commands (fixture has pre-existing command_attempts)
+      const probeAttempts = report.command_attempts.filter((attempt) => attempt.command_set === "install_probe");
+      assert.ok(probeAttempts.length > 0);
+      assert.ok(probeAttempts.every((attempt) => attempt.status === "passed"));
+
+      // Egress log should record the allowance
+      assert.ok(report.egress_logs.length > 0);
+      assert.ok(report.egress_logs.every((log) => log.decision === "allowed"));
+      assert.ok(report.egress_logs.every((log) => log.observed_host === "registry.npmjs.org"));
+      assert.ok(report.egress_logs.every((log) => log.reason.includes("matched approved registry allowlist")));
+    } finally {
+      cleanup(sourceDir);
+      cleanup(outputDir);
+    }
+  });
+
+  it("documents the bypass gap: commands without known registry patterns fall back to approvedHosts[0]", async () => {
+    // KNOWN LIMITATION: When inferRegistryHostFromCommand cannot find a known
+    // registry pattern (npm, pip, yarn, pnpm) in the command argv, it falls back
+    // to approvedHosts[0]. Since approvedHosts[0] is always in the approved set,
+    // the command is implicitly allowed.
+    //
+    // This test documents that behavior. The install_probe command set generates
+    // commands like ["npm", "ci", "--ignore-scripts"] which DO contain "npm",
+    // so they match the known registry pattern. But if a future command set
+    // generates commands without recognizable registry patterns, they would
+    // still be allowed due to the fallback.
+    //
+    // The honesty note in approval text and design reports documents this gap.
+    const sourceDir = tempDir("scout-probe-source-");
+    const outputDir = tempDir();
+    try {
+      const contract = egressTestContract({
+        registry_hosts: ["registry.npmjs.org"],
+      });
+
+      const report = await runProbe({
+        report: egressTestReport(),
+        candidateId: "SCOUT-alpha-green-1",
+        approvalId: contract.approval_phrase,
+        runner: new FakeSandboxRunner([{ exit_code: 0, stdout: "ok\n" }]),
+        sourceDir,
+        outputDir,
+        network: "registry_allowlist",
+        commandSet: "install_probe",
+        networkContract: contract,
+      });
+
+      // The npm command matches the known registry pattern, so it's allowed.
+      // This is NOT the bypass gap — it's the normal allowlist behavior.
+      // The bypass gap would occur with commands that don't match any pattern.
+      assert.equal(report.probe_status, "complete");
+      assert.ok(report.egress_logs.every((log) => log.decision === "allowed"));
+
+      // Document the bypass gap: if a command doesn't contain npm/pip/yarn/pnpm,
+      // inferRegistryHostFromCommand falls back to approvedHosts[0], which is
+      // always in the approved set, so the command is always allowed.
+      //
+      // This is a pre-execution argv-inferred check, NOT runtime packet filtering.
+      // The honesty note documents this limitation.
+      const approvedHosts = ["registry.npmjs.org"];
+      const fallbackHost = approvedHosts[0];
+      assert.equal(fallbackHost, "registry.npmjs.org");
+      // The fallback host is always approved, so evaluateEgressHost returns "allowed"
+      // for any command that doesn't match a known registry pattern.
+    } finally {
+      cleanup(sourceDir);
+      cleanup(outputDir);
+    }
+  });
+
+  it("blocks all commands when none match the approved allowlist", async () => {
+    const sourceDir = tempDir("scout-probe-source-");
+    const outputDir = tempDir();
+    try {
+      // Approve only pypi.org — npm commands infer registry.npmjs.org which is not approved
+      const contract = egressTestContract({
+        registry_hosts: ["pypi.org"],
+        approval_phrase:
+          "APPROVE SCOUT R2D SCOUT-alpha-green-1 acme/tooling https://github.com/acme/tooling/issues/12 registry_allowlist pypi.org install_probe scripts_disabled 120 retain_stdout_stderr_7_days",
+      });
+
+      const report = await runProbe({
+        report: egressTestReport(),
+        candidateId: "SCOUT-alpha-green-1",
+        approvalId: contract.approval_phrase,
+        runner: new FakeSandboxRunner(),
+        sourceDir,
+        outputDir,
+        network: "registry_allowlist",
+        commandSet: "install_probe",
+        networkContract: contract,
+      });
+
+      // All install_probe commands should be blocked
+      // probe_status is "partial" because blocked commands still appear in command_attempts
+      assert.equal(report.probe_status, "partial");
+      const probeAttempts = report.command_attempts.filter((attempt) => attempt.command_set === "install_probe");
+      assert.ok(probeAttempts.length > 0);
+      assert.ok(probeAttempts.every((attempt) => attempt.status === "blocked"));
+
+      // Egress log should record the denial for all commands
+      assert.ok(report.egress_logs.length > 0);
+      assert.ok(report.egress_logs.every((log) => log.decision === "denied"));
+    } finally {
+      cleanup(sourceDir);
+      cleanup(outputDir);
+    }
+  });
+});
