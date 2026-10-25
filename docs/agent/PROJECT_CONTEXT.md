@@ -6,7 +6,9 @@ Scout is a policy-enforced backend for finding open-source contribution and **pa
 
 Policy gates **Scout CLI operations** only; harnesses must follow runbooks for allowed/denied actions outside Scout.
 
-Current release: **0.6.2** (branch `scout/0.4.7-discovery-green`; `main` tracks 0.4.7–0.6.0 pending merge).
+Current package version: **0.6.2** ([`package.json`](../../package.json) and CLI help).
+
+**Income performance: unestablished.** Discovery, handoff, and local claim tracking are implemented. The scorecard summarizes operator-entered claim records; it does not measure actual manual effort or independently verify payouts. See [measurement limits](../income-ops.md#measurement-limits).
 
 ## Discovery Intents
 
@@ -87,5 +89,5 @@ npm run ci
 ## Open Gaps
 
 - Native webhook in Scout CLI (wrapper documented; ops wrapper uses `SCOUT_WEBHOOK_URL`)
-- Security vuln bounty — separate sibling project (`ScopeHound` spike under `Project_AI/`)
+- Security vuln bounty — separate sibling project (`ScopeHound` planning spike)
 - Income funnel Phase 0 operator gates (schedule + first paid) — see [`docs/architecture/INCOME_FUNNEL_PHASE_CHECKLIST.md`](../architecture/INCOME_FUNNEL_PHASE_CHECKLIST.md)

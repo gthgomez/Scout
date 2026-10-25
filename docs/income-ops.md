@@ -97,11 +97,21 @@ node scripts/income-scorecard.mjs
 
 ### Income KPIs (claims scorecard)
 
+These are operator targets, not measured results. Income performance remains unestablished until completed outcomes and actual effort have supporting evidence.
+
 | Metric | Target (30 days) |
 |--------|------------------|
 | Paid bounties | ≥1 |
 | In-flight claims | tracked weekly |
 | GO decisions from act-top1 | ≥2 |
+
+### Measurement limits
+
+- `claims stats` and the scorecard count current ledger statuses and sum `amount_usd` on records marked `paid`. These are operator-entered records, not independent payment verification. A `paid` record may have no amount; check amount coverage before interpreting the sum.
+- The ledger keeps one current record per issue, not a transition history or a 30-day cohort. `claimed_at` and `paid_at` are recorded/defaulted timestamps, not measured working time. Current status counts alone cannot establish conversion rates over a period.
+- `roi_score` and `estimated_effort_hours` come from ranking heuristics in [`roi-ranking.js`](../src/scout/roi-ranking.js). Session manifests record workflow stages and artifacts; neither records actual human work hours.
+
+Before broadening features, record a dated baseline using the existing ledger and session references: current claim counts, completed PR and payout evidence, missing amounts, and abandoned attempts. Keep a separate operator time log keyed to issue/session for discovery, validation, coding, review, and claim/payout follow-up, including unsuccessful attempts. The ledger has no structured actual-effort field. Report unknown outcomes or hours as unknown; calculate realized income per hour only when both the payout evidence and effort log cover the stated period.
 
 ## Claims ledger
 
