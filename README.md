@@ -130,7 +130,7 @@ npm run ci
 
 `npm ci` is the only supported install path — there is no `npm install` fallback. If `npm ci` fails, fix the lockfile; the failure is intentional (reproducible installs).
 
-GitHub Actions (self-hosted only): [`.github/workflows/ci-selfhosted.yml`](.github/workflows/ci-selfhosted.yml)
+GitHub Actions: [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs Scout CI on Ubuntu with Node.js 22.
 
 See [`CONTRIBUTING.md`](CONTRIBUTING.md) for branch/PR and runner setup.
 
