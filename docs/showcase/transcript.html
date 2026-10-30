@@ -1,0 +1,41 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Scout — offline stdout playback</title><style>
+*{box-sizing:border-box}body{margin:0;background:#0d1320;color:#e5edf7;font-family:system-ui,sans-serif;padding:36px}.wrap{max-width:1200px;margin:auto}header{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #324156;padding-bottom:20px}h1{font-size:27px;margin:0}header p{margin:9px 0 0;color:#b6c5d8;font-size:16px}.badge{color:#b6edce;background:#173d34;border:1px solid #2d6b58;padding:8px 12px;font-size:14px;border-radius:6px}h2{font-size:20px;color:#8ed8ff;margin:24px 0 16px}pre{white-space:pre-wrap;overflow-wrap:anywhere;font:18px/1.42 "DejaVu Sans Mono",monospace;margin:0;background:#141f30;border:1px solid #324156;border-radius:8px;padding:24px}.scene{display:none}.scene.active{display:block}footer{color:#aebed2;font-size:15px;margin-top:22px}nav{margin:15px 0}button{background:#24354c;border:1px solid #506b89;color:#e5edf7;padding:7px 12px;margin-right:8px;border-radius:5px;cursor:pointer}button:focus{outline:2px solid #8ed8ff}@media(max-width:600px){body{padding:16px}header{display:block}.badge{display:inline-block;margin-top:12px}pre{font-size:13px;padding:14px}h1{font-size:22px}}
+</style><div class="wrap"><header><div><h1>Scout · recorded stdout</h1><p>Paced playback of real local commands · synthetic acme/tooling fixture</p></div><span class="badge">OFFLINE FIXTURE</span></header><section class="scene active"><h2>1/3 · Discover a synthetic candidate</h2><pre>[1] Actual discovery mapper, injected local search response
+[
+  {
+    &quot;candidate_id&quot;: &quot;SCOUT-acme-tooling-12&quot;,
+    &quot;issue_title&quot;: &quot;Add onboarding flow for new contributors&quot;,
+    &quot;collection_status&quot;: &quot;PARTIAL&quot;
+  }
+]</pre></section><section class="scene "><h2>2/3 · Validate and export local evidence</h2><pre>[2] Validate the saved unit-test report (seeded decision)
+$ node src/scout/cli.js validate-report --report &lt;output&gt;/fixture-report.json
+Report validation passed for &lt;output&gt;/fixture-report.json.
+Candidates: 1
+Decisions: 1
+Evidence records: 1
+Decision coverage: 1/1
+
+[3] Export the decision cockpit and agent handoff
+$ node src/scout/cli.js cockpit --report &lt;output&gt;/fixture-report.json --out &lt;output&gt;/cockpit.md --json-out &lt;output&gt;/cockpit.json
+Scout decision cockpit written to &lt;output&gt;/cockpit.md
+Scout decision cockpit JSON written to &lt;output&gt;/cockpit.json
+$ node src/scout/cli.js handoff --report &lt;output&gt;/fixture-report.json --json-out &lt;output&gt;/handoff_package.json
+Scout handoff package written to &lt;output&gt;/handoff_package.json</pre></section><section class="scene "><h2>3/3 · Read the structured handoff</h2><pre>[4] Read the real exported handoff (selected fields)
+{
+  &quot;schema_version&quot;: &quot;1.1&quot;,
+  &quot;handoff_mode&quot;: &quot;metadata_only&quot;,
+  &quot;handoff_mode_reason&quot;: &quot;Archive-backed static inspection was not attempted (fast preset or static stage skipped).&quot;,
+  &quot;recommended_packages&quot;: [
+    &quot;SCOUT-alpha-green-1&quot;
+  ],
+  &quot;denied_actions&quot;: [
+    &quot;git_clone&quot;,
+    &quot;package_install&quot;,
+    &quot;repo_test_execution&quot;,
+    &quot;github_write&quot;,
+    &quot;issue_claim&quot;
+  ]
+}
+
+No archives, installs, probes, claims, contacts, or GitHub writes.
+Artifacts: &lt;temporary output directory&gt;</pre></section><footer>No live search, provider calls, issue claims or verified earnings. Handoff remains metadata_only.</footer><nav aria-label="Playback controls"><button onclick="pick(0)">Discovery</button><button onclick="pick(1)">Review / export</button><button onclick="pick(2)">Handoff</button><button onclick="clearInterval(timer)">Pause</button></nav></div><script>let current=0;function pick(index){current=index;document.querySelectorAll('.scene').forEach((s,i)=>s.classList.toggle('active',i===index))}const timer=setInterval(()=>pick((current+1)%3),6000);</script></html>

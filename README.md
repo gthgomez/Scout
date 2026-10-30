@@ -2,6 +2,22 @@
 
 Scout is a policy-enforced, agent-agnostic local tool for finding paid open-source bounty candidates and handing off to coding agents. Any AI agent harness (Cursor, Claude Code, Gemini, Antigravity, Codex, and others) can orchestrate Scout via runbooks and CLI artifacts.
 
+## See Scout in action
+
+![Scout offline demo: synthetic candidate discovery](docs/showcase/discovery.png)
+
+**[Watch the terminal-output walkthrough (MP4)](docs/showcase/offline-demo.mp4)** · [Animated preview](docs/showcase/offline-demo.gif) · [Full transcript and reproduction](docs/showcase/README.md)
+
+The walkthrough runs Scout locally with **synthetic test fixtures**: an injected search response becomes a candidate, a saved report is validated, and the CLI exports a decision cockpit and structured agent handoff. The preview displays recorded command output, paced for reading. It is not a live bounty search, a graphical Scout app, or evidence of income.
+
+![Exported Scout handoff: metadata-only mode and denied actions](docs/showcase/handoff.png)
+
+The handoff explicitly stays `metadata_only`: archive-backed inspection did not run. Coding agents get evidence references and denied actions; humans still verify issue availability, reward terms, and any eventual payment. No hosted demo is provided. Try the same offline example from the repository root, with Node.js in the supported version range:
+
+```sh
+node docs/showcase/run-offline.mjs
+```
+
 Policy gates **Scout CLI operations** (allowed/denied commands per runbook role). Agent harnesses must follow runbooks; Scout does not enforce policy inside external coding agents.
 
 **Current package version: [0.6.2](package.json)** — income ops pack (claims stats, act-top1, scorecard, rich webhooks) + platform-first candidate discovery.
@@ -114,7 +130,7 @@ npm run ci
 
 `npm ci` is the only supported install path — there is no `npm install` fallback. If `npm ci` fails, fix the lockfile; the failure is intentional (reproducible installs).
 
-GitHub Actions (self-hosted only): [`.github/workflows/ci-selfhosted.yml`](.github/workflows/ci-selfhosted.yml)
+GitHub Actions: [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs Scout CI on Ubuntu with Node.js 22.
 
 See [`CONTRIBUTING.md`](CONTRIBUTING.md) for branch/PR and runner setup.
 
